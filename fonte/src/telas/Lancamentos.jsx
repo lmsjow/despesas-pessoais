@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Plus, FileDown, CheckCheck, RotateCcw, Check, Copy, Trash2, Pencil, Inbox, Repeat, ListChecks, X, Wallet, ChevronDown } from "lucide-react";
 import { useApp } from "../contexto.jsx";
 import { useForm } from "./formContexto.js";
@@ -8,7 +8,7 @@ import { dataCurta, hoje, nomeMes } from "../lib/datas.js";
 import { PAGO, composicaoSaldo } from "../lib/calculos.js";
 import { CORES } from "../lib/categorias.js";
 import { gerarRelatorioPdf } from "../lib/relatorioPdf.js";
-import { Botao, Cartao, Confirmar, SeletorMes, Selecao, Vazio, classeEntrada, cx } from "../ui/base.jsx";
+import { Botao, Cartao, Confirmar, Modal, SeletorMes, Selecao, Vazio, classeEntrada, cx } from "../ui/base.jsx";
 import ModalPagamento from "./ModalPagamento.jsx";
 import CalculoSaldo from "./CalculoSaldo.jsx";
 
@@ -29,8 +29,21 @@ export default function Lancamentos({ colecao }) {
   const [categoria, setCategoria] = useState("");
   const [reabrir, setReabrir] = useState(false);
   const [pagando, setPagando] = useState(null); // { colecao, itens } da confirmação de pagamento
-  const [verCalculo, setVerCalculo] = useState(false);
+  const [verCalculo, setVerCalculo] = useState(null); // null | "balao" (computador) | "folha" (celular)
+  const refResumo = useRef();
   const pagar = (itens, col = colecao) => setPagando({ colecao: col, itens });
+  const alternarCalculo = () => setVerCalculo((v) => (v ? null : window.matchMedia("(max-width: 639px)").matches ? "folha" : "balao"));
+  useEffect(() => {
+    if (verCalculo !== "balao") return;
+    const fora = (e) => !refResumo.current?.contains(e.target) && setVerCalculo(null);
+    const esc = (e) => e.key === "Escape" && setVerCalculo(null);
+    document.addEventListener("mousedown", fora);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", fora);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [verCalculo]);
   const [selecao, setSelecao] = useState(null); // null = fora do modo seleção; Set de ids dentro dele
 
   const doMes = useMemo(
@@ -53,6 +66,16 @@ export default function Lancamentos({ colecao }) {
   const corCat = (c) => CORES[Math.max(0, categorias.indexOf(c)) % CORES.length];
   const infoMes = app.calc.meses.find((m) => m.mes === mes);
   const progresso = total ? pago / total : 0;
+  const calculo = verCalculo && (
+    <CalculoSaldo
+      composicao={composicaoSaldo(app.dados, app.calc, mes)}
+      mes={mes}
+      aoPagar={(col, itens) => {
+        setVerCalculo(null);
+        pagar(itens, col);
+      }}
+    />
+  );
   const h = hoje();
 
   const visiveis = [...atrasadas, ...lista];
@@ -133,6 +156,7 @@ export default function Lancamentos({ colecao }) {
       </div>
 
       {/* resumo */}
+      <div ref={refResumo} className="relative">
       <Cartao className="overflow-hidden">
         <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-5 dark:bg-slate-800">
           <Numero rotulo={despesa ? "Despesas do mês" : "Receitas do mês"} valor={total} />
@@ -146,13 +170,8 @@ export default function Lancamentos({ colecao }) {
               dica={despesa ? "receitas do mês ainda não recebidas" : "despesas do mês ainda não pagas"}
             />
           )}
-          {infoMes && <SaldoFim info={infoMes} aberto={verCalculo} aoAlternar={() => setVerCalculo((v) => !v)} />}
+          {infoMes && <SaldoFim info={infoMes} aberto={!!verCalculo} aoAlternar={alternarCalculo} />}
         </div>
-        {verCalculo && (
-          <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/60">
-            <CalculoSaldo composicao={composicaoSaldo(app.dados, app.calc, mes)} mes={mes} aoPagar={(col, itens) => pagar(itens, col)} />
-          </div>
-        )}
         <div className="flex items-center gap-3 border-t border-slate-100 px-3.5 py-2 dark:border-slate-800">
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
             <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progresso * 100}%` }} />
@@ -162,6 +181,17 @@ export default function Lancamentos({ colecao }) {
           </span>
         </div>
       </Cartao>
+      {verCalculo === "balao" && (
+        <div role="dialog" aria-label="Cálculo do saldo" className="animar-subir absolute right-2 top-[4.4rem] z-30 w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+          {calculo}
+        </div>
+      )}
+      </div>
+      {verCalculo === "folha" && (
+        <Modal titulo={infoMes?.passado ? "Como o mês fechou" : "Saldo previsto"} aoFechar={() => setVerCalculo(null)}>
+          <div className="pb-2 [&>div]:text-[14px]">{calculo}</div>
+        </Modal>
+      )}
 
       {/* filtros */}
       <div className="flex flex-wrap items-center gap-1.5">
