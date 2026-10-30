@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { lerValor, somar } from "./dinheiro.js";
 import { hoje, somarMeses, dataNoMes, mesAntigoParaNovo } from "./datas.js";
-import { calcular, PAGO, PENDENTE } from "./calculos.js";
+import { calcular, composicaoSaldo, PAGO, PENDENTE } from "./calculos.js";
 import { gerarLancamentos } from "./gerar.js";
 import { migrarDoAntigo, lerBackup } from "./migrar.js";
 import { dadosVazios } from "./modelo.js";
@@ -86,6 +86,51 @@ describe("calcular", () => {
     const r = calcular(base([{ mes: "2026-10", valor: 850, status: PENDENTE }], [{ mes: "2026-10", valor: 1000, status: PENDENTE }]), AGORA);
     expect(r.mesAtual.comprometido).toBeCloseTo(0.85);
     expect(r.mesAtual.situacao).toBe("Risco");
+  });
+});
+
+describe("composicaoSaldo", () => {
+  // cenário do usuário: saldo 3.078,10; novembro com 10.000 a receber e 6.843,08 a pagar;
+  // outubro ainda com 3.500 a receber e 886,66 a pagar em aberto
+  const dados = () => {
+    const d = base(
+      [
+        { mes: "2026-10", valor: 886.66, status: PENDENTE },
+        { mes: "2026-11", valor: 6843.08, status: PENDENTE },
+      ],
+      [
+        { mes: "2026-10", valor: 3500, status: PENDENTE },
+        { mes: "2026-11", valor: 10000, status: PENDENTE },
+      ],
+    );
+    d.config.saldoInicial = 3078.1;
+    return d;
+  };
+
+  it("as linhas somam exatamente o saldo previsto do mês", () => {
+    const d = dados();
+    const calc = calcular(d, AGORA);
+    const c = composicaoSaldo(d, calc, "2026-11");
+    expect(c).toMatchObject({ tipo: "previsto", saldoHoje: 3078.1, aReceber: 10000, aPagar: 6843.08 });
+    expect(c.anteriores).toMatchObject({ aReceber: 3500, aPagar: 886.66 });
+    expect(somar([{ valor: c.saldoHoje }, { valor: c.aReceber }, { valor: c.anteriores.aReceber }, { valor: -c.aPagar }, { valor: -c.anteriores.aPagar }])).toBe(c.saldoFim);
+    expect(c.saldoFim).toBe(8848.36);
+  });
+
+  it("no mês atual, 'anteriores' são só as atrasadas", () => {
+    const d = dados();
+    d.despesas.velha = { id: "velha", mes: "2026-09", valor: 100, status: PENDENTE };
+    const calc = calcular(d, AGORA);
+    const c = composicaoSaldo(d, calc, "2026-10");
+    expect(c.anteriores.despesas.map((x) => x.id)).toEqual(["velha"]);
+    expect(c.saldoHoje + c.aReceber + c.anteriores.aReceber - c.aPagar - c.anteriores.aPagar).toBeCloseTo(c.saldoFim, 2);
+  });
+
+  it("mês passado mostra o realizado", () => {
+    const d = dados();
+    d.despesas.set = { id: "set", mes: "2026-09", valor: 78.1, status: PAGO };
+    const c = composicaoSaldo(d, calcular(d, AGORA), "2026-09");
+    expect(c).toMatchObject({ tipo: "realizado", saldoInicio: 3078.1, pago: 78.1, saldoFim: 3000 });
   });
 });
 

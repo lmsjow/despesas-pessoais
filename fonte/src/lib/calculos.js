@@ -7,6 +7,46 @@ export const PENDENTE = "pendente";
 const vals = (obj) => Object.values(obj || {});
 
 /**
+ * Explica de onde vem o saldo no fim de um mês (o mesmo número de `calcular`).
+ *  - meses passados: saldo no início + recebido − pago ± ajustes
+ *  - mês atual e futuros: saldo de hoje + a receber − a pagar do mês, mais o que
+ *    ainda está em aberto de meses anteriores (atrasado ou não pago ainda).
+ */
+export function composicaoSaldo(dados, calc, mes) {
+  const info = calc.meses.find((m) => m.mes === mes);
+  if (!info) return null;
+  if (info.passado) {
+    return {
+      tipo: "realizado",
+      saldoInicio: info.saldoInicio,
+      recebido: info.recReceb,
+      pago: info.despPagas,
+      ajustes: info.ajustes,
+      saldoFim: info.saldoFim,
+    };
+  }
+  const anteriores = (colecao) =>
+    vals(dados[colecao])
+      .filter((x) => x.mes && x.mes < mes && x.status !== PAGO)
+      .sort((a, b) => (a.mes + (a.vencimento || a.data || "")).localeCompare(b.mes + (b.vencimento || b.data || "")));
+  const despAnt = anteriores("despesas");
+  const recAnt = anteriores("receitas");
+  return {
+    tipo: "previsto",
+    saldoHoje: calc.saldoAtual,
+    aReceber: info.aReceber,
+    aPagar: info.aPagar,
+    anteriores: {
+      despesas: despAnt,
+      receitas: recAnt,
+      aPagar: reais(despAnt.reduce((s, x) => s + centavos(x.valor), 0)),
+      aReceber: reais(recAnt.reduce((s, x) => s + centavos(x.valor), 0)),
+    },
+    saldoFim: info.saldoFim,
+  };
+}
+
+/**
  * Calcula saldo, situação de cada mês e projeção.
  *
  * Regras (corrigidas em relação à versão antiga):

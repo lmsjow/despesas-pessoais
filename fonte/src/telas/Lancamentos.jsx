@@ -1,15 +1,16 @@
 import { useMemo, useState } from "react";
-import { Search, Plus, FileDown, CheckCheck, RotateCcw, Check, Copy, Trash2, Pencil, Inbox, Repeat, ListChecks, X, Wallet } from "lucide-react";
+import { Search, Plus, FileDown, CheckCheck, RotateCcw, Check, Copy, Trash2, Pencil, Inbox, Repeat, ListChecks, X, Wallet, ChevronDown } from "lucide-react";
 import { useApp } from "../contexto.jsx";
 import { useForm } from "./formContexto.js";
 import { alternarStatus, excluir, marcarMes, salvarLancamento } from "../dados/acoes.js";
 import { brl, somar } from "../lib/dinheiro.js";
 import { dataCurta, hoje, nomeMes } from "../lib/datas.js";
-import { PAGO } from "../lib/calculos.js";
+import { PAGO, composicaoSaldo } from "../lib/calculos.js";
 import { CORES } from "../lib/categorias.js";
 import { gerarRelatorioPdf } from "../lib/relatorioPdf.js";
 import { Botao, Cartao, Confirmar, SeletorMes, Selecao, Vazio, classeEntrada, cx } from "../ui/base.jsx";
 import ModalPagamento from "./ModalPagamento.jsx";
+import CalculoSaldo from "./CalculoSaldo.jsx";
 
 // Livro-caixa: tabela densa com colunas alinhadas no computador e linhas de
 // duas alturas no celular. Em telas médias "Forma" e as ações ficam ocultas
@@ -27,7 +28,9 @@ export default function Lancamentos({ colecao }) {
   const [busca, setBusca] = useState("");
   const [categoria, setCategoria] = useState("");
   const [reabrir, setReabrir] = useState(false);
-  const [pagando, setPagando] = useState(null);
+  const [pagando, setPagando] = useState(null); // { colecao, itens } da confirmação de pagamento
+  const [verCalculo, setVerCalculo] = useState(false);
+  const pagar = (itens, col = colecao) => setPagando({ colecao: col, itens });
   const [selecao, setSelecao] = useState(null); // null = fora do modo seleção; Set de ids dentro dele
 
   const doMes = useMemo(
@@ -67,7 +70,7 @@ export default function Lancamentos({ colecao }) {
   /** Círculo: em aberto → pede a data; pago → reabre com opção de desfazer. */
   function aoMarcar(x) {
     if (selecao) return x.status !== PAGO && alternarSelecao(x.id);
-    if (x.status !== PAGO) return setPagando([x]);
+    if (x.status !== PAGO) return pagar([x]);
     app.gravar(alternarStatus(colecao, x));
     app.avisar(`“${x.descricao}” voltou para em aberto`, {
       acao: { rotulo: "Desfazer", executar: () => app.gravar({ [`${colecao}.${x.id}`]: x }) },
@@ -117,7 +120,7 @@ export default function Lancamentos({ colecao }) {
             </Botao>
           )}
           {emAberto.length > 0 && (
-            <Botao variante="secundario" tamanho="sm" onClick={() => setPagando(emAberto)}>
+            <Botao variante="secundario" tamanho="sm" onClick={() => pagar(emAberto)}>
               <CheckCheck size={15} /> {despesa ? "Pagar todas" : "Receber todas"} <span className="text-slate-400">{emAberto.length}</span>
             </Botao>
           )}
@@ -131,17 +134,25 @@ export default function Lancamentos({ colecao }) {
 
       {/* resumo */}
       <Cartao className="overflow-hidden">
-        <div className="grid grid-cols-2 sm:grid-cols-4">
-          <Numero rotulo="Total do mês" valor={total} />
-          <Numero rotulo={despesa ? "Pago" : "Recebido"} valor={pago} cor="text-emerald-600 dark:text-emerald-400" className="border-l" />
-          <Numero
-            rotulo={despesa ? "A pagar" : "A receber"}
-            valor={total - pago}
-            cor={despesa ? "text-rose-600 dark:text-rose-400" : "text-sky-600 dark:text-sky-400"}
-            className="border-t sm:border-l sm:border-t-0"
-          />
-          {infoMes && <SaldoFim info={infoMes} calc={app.calc} />}
+        <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-5 dark:bg-slate-800">
+          <Numero rotulo={despesa ? "Despesas do mês" : "Receitas do mês"} valor={total} />
+          <Numero rotulo={despesa ? "Pago" : "Recebido"} valor={pago} cor="text-emerald-600 dark:text-emerald-400" />
+          <Numero rotulo={despesa ? "A pagar" : "A receber"} valor={total - pago} cor={despesa ? "text-rose-600 dark:text-rose-400" : "text-sky-600 dark:text-sky-400"} />
+          {infoMes && (
+            <Numero
+              rotulo={despesa ? "A receber" : "A pagar"}
+              valor={despesa ? infoMes.aReceber : infoMes.aPagar}
+              cor={despesa ? "text-sky-600 dark:text-sky-400" : "text-rose-600 dark:text-rose-400"}
+              dica={despesa ? "receitas do mês ainda não recebidas" : "despesas do mês ainda não pagas"}
+            />
+          )}
+          {infoMes && <SaldoFim info={infoMes} aberto={verCalculo} aoAlternar={() => setVerCalculo((v) => !v)} />}
         </div>
+        {verCalculo && (
+          <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/60">
+            <CalculoSaldo composicao={composicaoSaldo(app.dados, app.calc, mes)} mes={mes} aoPagar={(col, itens) => pagar(itens, col)} />
+          </div>
+        )}
         <div className="flex items-center gap-3 border-t border-slate-100 px-3.5 py-2 dark:border-slate-800">
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
             <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progresso * 100}%` }} />
@@ -207,7 +218,7 @@ export default function Lancamentos({ colecao }) {
               <span className="flex items-center gap-3">
                 <span className="num text-xs font-semibold text-rose-600 dark:text-rose-400">{brl(somar(atrasadas))}</span>
                 {!selecao && atrasadas.length > 1 && (
-                  <button onClick={() => setPagando(atrasadas)} className="text-xs font-semibold text-rose-700 hover:underline dark:text-rose-300">
+                  <button onClick={() => pagar(atrasadas)} className="text-xs font-semibold text-rose-700 hover:underline dark:text-rose-300">
                     {despesa ? "Pagar todas" : "Receber todas"}
                   </button>
                 )}
@@ -262,7 +273,7 @@ export default function Lancamentos({ colecao }) {
               <div className="font-semibold">{selecionados.length} selecionada(s)</div>
               <div className="num text-xs opacity-75">{brl(somar(selecionados))}</div>
             </div>
-            <Botao tamanho="sm" disabled={!selecionados.length} onClick={() => setPagando(selecionados)}>
+            <Botao tamanho="sm" disabled={!selecionados.length} onClick={() => pagar(selecionados)}>
               <CheckCheck size={15} /> {despesa ? "Pagar" : "Receber"}
             </Botao>
             <button aria-label="Cancelar seleção" className="rounded-lg p-1.5 opacity-70 hover:opacity-100" onClick={() => setSelecao(null)}>
@@ -272,7 +283,7 @@ export default function Lancamentos({ colecao }) {
         </div>
       )}
 
-      {pagando && <ModalPagamento colecao={colecao} itens={pagando} aoFechar={() => setPagando(null)} aoConcluir={() => setSelecao(null)} />}
+      {pagando && <ModalPagamento colecao={pagando.colecao} itens={pagando.itens} aoFechar={() => setPagando(null)} aoConcluir={() => setSelecao(null)} />}
 
       {reabrir && (
         <Confirmar
@@ -286,37 +297,35 @@ export default function Lancamentos({ colecao }) {
   );
 }
 
-function Numero({ rotulo, valor, cor, className }) {
+function Numero({ rotulo, valor, cor, dica }) {
   return (
-    <div className={cx("border-slate-100 px-3.5 py-2.5 dark:border-slate-800", className)}>
+    <div className="bg-white px-3.5 py-2.5 dark:bg-slate-900" title={dica}>
       <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{rotulo}</div>
       <div className={cx("num truncate text-[15px] font-semibold sm:text-base", cor)}>{brl(valor)}</div>
     </div>
   );
 }
 
-/** Saldo da conta ao final do mês exibido (real nos meses passados, previsto nos demais). */
-function SaldoFim({ info, calc }) {
+/** Saldo da conta ao final do mês exibido (real nos meses passados, previsto nos demais), com o cálculo sob demanda. */
+function SaldoFim({ info, aberto, aoAlternar }) {
   const negativo = info.saldoFim < 0;
-  const explicacao = info.passado
-    ? "saldo real no fim do mês"
-    : info.atual
-      ? `hoje ${brl(calc.saldoAtual)} − contas em aberto${calc.atrasadas.despesas.length ? " e atrasadas" : ""}`
-      : "previsão considerando os meses anteriores";
   return (
-    <div
+    <button
+      onClick={aoAlternar}
+      aria-expanded={aberto}
       className={cx(
-        "border-l border-t px-3.5 py-2.5 sm:border-t-0",
-        negativo ? "border-rose-100 bg-rose-50/80 dark:border-slate-800 dark:bg-rose-500/10" : "border-emerald-100 bg-emerald-50/70 dark:border-slate-800 dark:bg-emerald-500/10",
+        "col-span-2 px-3.5 py-2.5 text-left transition sm:col-span-1",
+        negativo ? "bg-rose-50 hover:bg-rose-100/70 dark:bg-rose-950/40" : "bg-emerald-50 hover:bg-emerald-100/70 dark:bg-emerald-950/40",
       )}
-      title={explicacao}
     >
       <div className={cx("flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide", negativo ? "text-rose-600 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-400")}>
         <Wallet size={12} /> {info.passado ? "Saldo no fim do mês" : "Saldo previsto no fim"}
       </div>
       <div className={cx("num truncate text-[15px] font-bold sm:text-base", negativo ? "text-rose-600 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-300")}>{brl(info.saldoFim)}</div>
-      <div className="hidden truncate text-[11px] text-slate-500 sm:block">{explicacao}</div>
-    </div>
+      <div className={cx("flex items-center gap-0.5 text-[11.5px] font-medium", negativo ? "text-rose-600/80" : "text-emerald-700/80 dark:text-emerald-400/80")}>
+        {aberto ? "ocultar cálculo" : "ver cálculo"} <ChevronDown size={13} className={cx("transition", aberto && "rotate-180")} />
+      </div>
+    </button>
   );
 }
 
