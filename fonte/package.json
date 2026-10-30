@@ -1,0 +1,26 @@
+{
+  "name": "casa-e-cofre",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vitest run && vite build && node -e \"require('fs').copyFileSync('dist/index.html','../index.html')\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "firebase": "^11.10.0",
+    "lucide-react": "^1.65.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^4.7.0",
+    "tailwindcss": "^4.3.3",
+    "vite": "^6.4.5",
+    "vite-plugin-singlefile": "^2.3.4",
+    "vitest": "^3.2.7"
+  }
+}

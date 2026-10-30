@@ -1,4 +1,7 @@
-node_modules
-dist
-.DS_Store
-*.local
+node_modules/
+backup-versao-antiga/
+enviar-ao-github/
+fonte/node_modules/
+fonte/dist/
+.claude/
+fonte/.claude/
