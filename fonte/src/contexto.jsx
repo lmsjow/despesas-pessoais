@@ -33,7 +33,17 @@ function mensagemErro(e) {
  */
 export function ProvedorApp({ armazenamento, dados, sincronia, usuario, aoSair, demo, children }) {
   const avisar = useAvisos();
-  const [tema, setTema] = useState(() => lerPref("tema", window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "escuro" : "claro"));
+  // preferência: "claro" | "escuro" | "sistema" (segue o aparelho)
+  const [preferenciaTema, setPreferenciaTema] = useState(() => lerPref("tema", "sistema"));
+  const [sistemaEscuro, setSistemaEscuro] = useState(() => !!window.matchMedia?.("(prefers-color-scheme: dark)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!mq) return;
+    const mudar = (e) => setSistemaEscuro(e.matches);
+    mq.addEventListener("change", mudar);
+    return () => mq.removeEventListener("change", mudar);
+  }, []);
+  const tema = preferenciaTema === "sistema" ? (sistemaEscuro ? "escuro" : "claro") : preferenciaTema;
   const [ocultar, setOcultar] = useState(() => lerPref("ocultar", false));
   const [tela, setTela] = useState("painel");
   const [online, setOnline] = useState(navigator.onLine);
@@ -43,8 +53,8 @@ export function ProvedorApp({ armazenamento, dados, sincronia, usuario, aoSair, 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", tema === "escuro");
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", tema === "escuro" ? "#020617" : "#f1f5f9");
-    salvarPref("tema", tema);
   }, [tema]);
+  useEffect(() => salvarPref("tema", preferenciaTema), [preferenciaTema]);
   useEffect(() => salvarPref("ocultar", ocultar), [ocultar]);
   useEffect(() => {
     const on = () => setOnline(true);
@@ -114,7 +124,8 @@ export function ProvedorApp({ armazenamento, dados, sincronia, usuario, aoSair, 
       window.scrollTo({ top: 0 });
     },
     tema,
-    alternarTema: () => setTema((t) => (t === "escuro" ? "claro" : "escuro")),
+    preferenciaTema,
+    definirTema: setPreferenciaTema,
     ocultar,
     alternarOcultar: () => setOcultar((v) => !v),
     sincronia: { ...sincronia, online },

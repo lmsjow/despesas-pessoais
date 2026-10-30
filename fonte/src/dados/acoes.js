@@ -32,6 +32,20 @@ export function alternarStatus(colecao, item) {
   };
 }
 
+/**
+ * Marca itens como pagos/recebidos na data informada (padrão: hoje).
+ * `valores` permite corrigir o valor efetivamente pago: { id: valor }.
+ */
+export function pagar(colecao, itens, data = hoje(), valores = {}) {
+  const campoData = colecao === "despesas" ? "pagoEm" : "recebidoEm";
+  const mudancas = {};
+  for (const it of itens) {
+    const valor = valores[it.id] > 0 ? arred(valores[it.id]) : it.valor;
+    mudancas[`${colecao}.${it.id}`] = { ...it, valor, status: PAGO, [campoData]: data, atualizadoEm: agora() };
+  }
+  return mudancas;
+}
+
 /** Marca como pago (ou reabre) tudo de um mês na coleção indicada. */
 export function marcarMes(dados, colecao, mes, pagar) {
   const mudancas = {};

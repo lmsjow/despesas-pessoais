@@ -15,7 +15,7 @@ const DEMO = new URLSearchParams(location.search).has("demo");
 // aplica o tema salvo antes do primeiro desenho (evita piscar claro→escuro)
 try {
   const t = JSON.parse(localStorage.getItem("cc-tema") || "null");
-  if (t === "escuro" || (t === null && matchMedia("(prefers-color-scheme: dark)").matches)) document.documentElement.classList.add("dark");
+  if (t === "escuro" || ((t === null || t === "sistema") && matchMedia("(prefers-color-scheme: dark)").matches)) document.documentElement.classList.add("dark");
 } catch {}
 
 export default function App() {

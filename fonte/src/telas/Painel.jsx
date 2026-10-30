@@ -2,18 +2,19 @@ import { useMemo, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, ReferenceLine } from "recharts";
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Check, ChevronRight, Scale, Wallet, Gauge, SlidersHorizontal } from "lucide-react";
 import { useApp } from "../contexto.jsx";
-import { alternarStatus } from "../dados/acoes.js";
 import { brl, pct } from "../lib/dinheiro.js";
 import { dataBR, dataCurta, hoje, nomeMes, somarMeses } from "../lib/datas.js";
 import { PAGO } from "../lib/calculos.js";
 import { Cartao, Selo, Titulo, corSituacao, cx } from "../ui/base.jsx";
 import { DicaGrafico, eixo, formatoEixo, useCoresGrafico } from "../ui/graficos.jsx";
 import ModalAjuste from "./ModalAjuste.jsx";
+import ModalPagamento from "./ModalPagamento.jsx";
 
 export default function Painel() {
-  const { calc, dados, irPara, gravar } = useApp();
+  const { calc, dados, irPara } = useApp();
   const cores = useCoresGrafico();
   const [ajustar, setAjustar] = useState(false);
+  const [pagando, setPagando] = useState(null);
   const m = calc.mesAtual;
   const cfg = dados.config;
   const at = calc.atrasadas;
@@ -205,7 +206,7 @@ export default function Painel() {
                     </div>
                     <div className="num text-sm font-semibold">{brl(d.valor)}</div>
                     <button
-                      onClick={() => gravar(alternarStatus("despesas", d), `“${d.descricao}” paga`)}
+                      onClick={() => setPagando([d])}
                       title="Marcar como paga"
                       aria-label={`Marcar ${d.descricao} como paga`}
                       className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-slate-300 text-slate-400 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white dark:border-slate-600"
@@ -245,6 +246,7 @@ export default function Painel() {
       </div>
 
       {ajustar && <ModalAjuste aoFechar={() => setAjustar(false)} />}
+      {pagando && <ModalPagamento colecao="despesas" itens={pagando} aoFechar={() => setPagando(null)} />}
     </div>
   );
 }

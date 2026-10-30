@@ -6,6 +6,7 @@ import { lerBackup } from "../lib/migrar.js";
 import { novoId } from "../lib/modelo.js";
 import { brl, somar } from "../lib/dinheiro.js";
 import { hoje } from "../lib/datas.js";
+import { AbasTema } from "../ui/SeletorTema.jsx";
 import { Botao, BotaoIcone, Campo, CampoValor, Cartao, Confirmar, Interruptor, classeEntrada, cx } from "../ui/base.jsx";
 
 function baixarBackup(dados) {
@@ -62,6 +63,10 @@ export default function Configuracoes() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 pb-16">
+      <Secao titulo="Aparência" texto="Vale só para este aparelho. “Automático” segue o tema do celular ou do computador.">
+        <AbasTema />
+      </Secao>
+
       <Secao titulo="Saldo de partida" texto="O saldo da conta no dia em que vocês começaram a usar o app.">
         <div className="grid gap-3 sm:grid-cols-2">
           <Campo rotulo="Saldo inicial">

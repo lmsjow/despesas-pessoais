@@ -1,13 +1,21 @@
 import { useMemo, useState } from "react";
-import { Search, Plus, FileDown, CheckCheck, RotateCcw, Check, Copy, Trash2, Pencil, AlertTriangle, Inbox, Repeat } from "lucide-react";
+import { Search, Plus, FileDown, CheckCheck, RotateCcw, Check, Copy, Trash2, Pencil, Inbox, Repeat, ListChecks, X, Wallet } from "lucide-react";
 import { useApp } from "../contexto.jsx";
 import { useForm } from "./formContexto.js";
 import { alternarStatus, excluir, marcarMes, salvarLancamento } from "../dados/acoes.js";
 import { brl, somar } from "../lib/dinheiro.js";
 import { dataCurta, hoje, nomeMes } from "../lib/datas.js";
 import { PAGO } from "../lib/calculos.js";
+import { CORES } from "../lib/categorias.js";
 import { gerarRelatorioPdf } from "../lib/relatorioPdf.js";
-import { Abas, Botao, BotaoIcone, Cartao, Confirmar, SeletorMes, Selecao, Selo, Vazio, classeEntrada, cx } from "../ui/base.jsx";
+import { Botao, Cartao, Confirmar, SeletorMes, Selecao, Vazio, classeEntrada, cx } from "../ui/base.jsx";
+import ModalPagamento from "./ModalPagamento.jsx";
+
+// Livro-caixa: tabela densa com colunas alinhadas no computador e linhas de
+// duas alturas no celular. Em telas médias "Forma" e as ações ficam ocultas
+// para a descrição não ser espremida.
+const GRADE = "md:grid-cols-[24px_56px_minmax(0,1fr)_130px_104px_108px] xl:grid-cols-[24px_56px_minmax(0,1fr)_140px_88px_104px_108px_72px]";
+const SO_XL = "hidden xl:block";
 
 export default function Lancamentos({ colecao }) {
   const app = useApp();
@@ -18,26 +26,53 @@ export default function Lancamentos({ colecao }) {
   const [status, setStatus] = useState("todos");
   const [busca, setBusca] = useState("");
   const [categoria, setCategoria] = useState("");
-  const [confirmar, setConfirmar] = useState(null);
+  const [reabrir, setReabrir] = useState(false);
+  const [pagando, setPagando] = useState(null);
+  const [selecao, setSelecao] = useState(null); // null = fora do modo seleção; Set de ids dentro dele
 
   const doMes = useMemo(
     () => Object.values(app.dados[colecao]).filter((x) => x.mes === mes).sort((a, b) => (a[campoData] || "").localeCompare(b[campoData] || "") || a.descricao.localeCompare(b.descricao)),
     [app.dados, colecao, mes, campoData],
   );
   const termo = busca.trim().toLowerCase();
-  const lista = doMes.filter(
-    (x) =>
-      (status === "todos" || (status === "pago" ? x.status === PAGO : x.status !== PAGO)) &&
-      (!categoria || x.categoria === categoria) &&
-      (!termo || `${x.descricao} ${x.obs} ${x.responsavel} ${x.categoria}`.toLowerCase().includes(termo)),
-  );
+  const filtrar = (x) =>
+    (status === "todos" || (status === "pago" ? x.status === PAGO : x.status !== PAGO)) &&
+    (!categoria || x.categoria === categoria) &&
+    (!termo || `${x.descricao} ${x.obs} ${x.responsavel} ${x.categoria}`.toLowerCase().includes(termo));
+  const lista = doMes.filter(filtrar);
 
+  const atual = mes === app.calc.atual;
+  const atrasadas = atual ? (despesa ? app.calc.atrasadas.despesas : app.calc.atrasadas.receitas).filter(filtrar) : [];
   const total = somar(doMes);
   const pago = somar(doMes.filter((x) => x.status === PAGO));
-  const abertos = doMes.filter((x) => x.status !== PAGO).length;
-  const atrasadas = despesa ? app.calc.atrasadas.despesas : app.calc.atrasadas.receitas;
+  const emAberto = doMes.filter((x) => x.status !== PAGO);
   const categorias = despesa ? app.dados.config.categoriasDespesa : app.dados.config.categoriasReceita;
+  const corCat = (c) => CORES[Math.max(0, categorias.indexOf(c)) % CORES.length];
+  const infoMes = app.calc.meses.find((m) => m.mes === mes);
+  const progresso = total ? pago / total : 0;
   const h = hoje();
+
+  const visiveis = [...atrasadas, ...lista];
+  const selecionados = selecao ? visiveis.filter((x) => selecao.has(x.id)) : [];
+  const abertosVisiveis = visiveis.filter((x) => x.status !== PAGO);
+
+  function alternarSelecao(id) {
+    setSelecao((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  }
+
+  /** Círculo: em aberto → pede a data; pago → reabre com opção de desfazer. */
+  function aoMarcar(x) {
+    if (selecao) return x.status !== PAGO && alternarSelecao(x.id);
+    if (x.status !== PAGO) return setPagando([x]);
+    app.gravar(alternarStatus(colecao, x));
+    app.avisar(`“${x.descricao}” voltou para em aberto`, {
+      acao: { rotulo: "Desfazer", executar: () => app.gravar({ [`${colecao}.${x.id}`]: x }) },
+    });
+  }
 
   function pdf() {
     const r = gerarRelatorioPdf({
@@ -46,72 +81,150 @@ export default function Lancamentos({ colecao }) {
       filtros: [status !== "todos" && (status === "pago" ? "Pagas" : "Em aberto"), categoria, termo && `busca “${busca.trim()}”`].filter(Boolean).join(" · "),
       saldoAtual: app.calc.saldoAtual,
       fimDoMes: app.calc.mesAtual?.saldoFim,
-      ehMesAtual: mes === app.calc.atual,
+      ehMesAtual: atual,
     });
     if (r === "vazio") app.avisar("Não há despesas com esses filtros.", { tipo: "erro" });
     if (r === "bloqueado") app.avisar("O navegador bloqueou a janela do relatório. Permita pop-ups para este site.", { tipo: "erro" });
   }
 
+  const propsLinha = { colecao, campoData, hoje: h, aoMarcar, selecao, corCat };
+  const contagem = (f) => doMes.filter(f).length;
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <SeletorMes mes={mes} aoMudar={setMes} />
-        <div className="flex gap-2">
+    <div className="space-y-3">
+      {/* barra de ferramentas */}
+      <div className="flex flex-wrap items-center gap-2">
+        <SeletorMes
+          mes={mes}
+          aoMudar={(m) => {
+            setMes(m);
+            setSelecao(null);
+          }}
+        />
+        <div className="relative min-w-40 flex-1 sm:max-w-64">
+          <Search size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input className={cx(classeEntrada, "py-1.5 pl-8 text-sm")} placeholder="Buscar" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        </div>
+        <div className="ml-auto flex flex-wrap gap-2">
           {despesa && (
-            <Botao variante="secundario" onClick={pdf} title="Gerar relatório para imprimir ou salvar em PDF">
-              <FileDown size={16} /> <span className="hidden sm:inline">PDF</span>
+            <Botao variante="secundario" tamanho="sm" onClick={pdf} title="Gerar relatório para imprimir ou salvar em PDF">
+              <FileDown size={15} /> <span className="hidden sm:inline">PDF</span>
+            </Botao>
+          )}
+          {emAberto.length + atrasadas.length > 0 && (
+            <Botao variante="secundario" tamanho="sm" onClick={() => setSelecao(selecao ? null : new Set())}>
+              <ListChecks size={15} /> <span className="hidden sm:inline">{selecao ? "Cancelar seleção" : "Selecionar"}</span>
+            </Botao>
+          )}
+          {emAberto.length > 0 && (
+            <Botao variante="secundario" tamanho="sm" onClick={() => setPagando(emAberto)}>
+              <CheckCheck size={15} /> {despesa ? "Pagar todas" : "Receber todas"} <span className="text-slate-400">{emAberto.length}</span>
             </Botao>
           )}
           <span className="hidden lg:block">
-            <Botao onClick={() => abrirForm(colecao, null)}>
-              <Plus size={17} /> {despesa ? "Nova despesa" : "Nova receita"}
+            <Botao tamanho="sm" onClick={() => abrirForm(colecao, null)}>
+              <Plus size={15} /> {despesa ? "Nova despesa" : "Nova receita"}
             </Botao>
           </span>
         </div>
       </div>
 
-      {atrasadas.length > 0 && mes === app.calc.atual && (
-        <Cartao className="border-amber-200 bg-amber-50/70 p-4 dark:border-amber-500/30 dark:bg-amber-500/5">
-          <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-300">
-            <AlertTriangle size={17} /> {atrasadas.length} {despesa ? "conta(s) atrasada(s)" : "receita(s) não recebida(s)"} de meses anteriores ·{" "}
-            {brl(despesa ? app.calc.atrasadas.totalDespesas : app.calc.atrasadas.totalReceitas)}
+      {/* resumo */}
+      <Cartao className="overflow-hidden">
+        <div className="grid grid-cols-2 sm:grid-cols-4">
+          <Numero rotulo="Total do mês" valor={total} />
+          <Numero rotulo={despesa ? "Pago" : "Recebido"} valor={pago} cor="text-emerald-600 dark:text-emerald-400" className="border-l" />
+          <Numero
+            rotulo={despesa ? "A pagar" : "A receber"}
+            valor={total - pago}
+            cor={despesa ? "text-rose-600 dark:text-rose-400" : "text-sky-600 dark:text-sky-400"}
+            className="border-t sm:border-l sm:border-t-0"
+          />
+          {infoMes && <SaldoFim info={infoMes} calc={app.calc} />}
+        </div>
+        <div className="flex items-center gap-3 border-t border-slate-100 px-3.5 py-2 dark:border-slate-800">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+            <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progresso * 100}%` }} />
           </div>
-          <div className="divide-y divide-amber-200/60 dark:divide-amber-500/20">
-            {atrasadas.slice(0, 8).map((x) => (
-              <Linha key={x.id} item={x} colecao={colecao} campoData={campoData} hoje={h} mostrarMes />
-            ))}
-          </div>
-          {atrasadas.length > 8 && <p className="mt-2 text-xs text-amber-700">e mais {atrasadas.length - 8}…</p>}
-        </Cartao>
-      )}
+          <span className="num text-xs text-slate-500">
+            {Math.round(progresso * 100)}% {despesa ? "pago" : "recebido"}
+          </span>
+        </div>
+      </Cartao>
 
-      <div className="grid grid-cols-3 gap-3">
-        <Resumo rotulo="Total do mês" valor={total} />
-        <Resumo rotulo={despesa ? "Pago" : "Recebido"} valor={pago} cor="text-emerald-600 dark:text-emerald-400" />
-        <Resumo rotulo={despesa ? "A pagar" : "A receber"} valor={total - pago} cor={despesa ? "text-rose-600 dark:text-rose-400" : "text-sky-600 dark:text-sky-400"} />
+      {/* filtros */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {[
+          ["todos", "Todas", doMes.length],
+          ["aberto", "Em aberto", emAberto.length],
+          ["pago", despesa ? "Pagas" : "Recebidas", contagem((x) => x.status === PAGO)],
+        ].map(([v, r, n]) => (
+          <button
+            key={v}
+            onClick={() => setStatus(v)}
+            className={cx(
+              "rounded-full px-3 py-1 text-[12.5px] font-medium transition",
+              status === v ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" : "text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800",
+            )}
+          >
+            {r} <span className="opacity-60">{n}</span>
+          </button>
+        ))}
+        <Selecao className="ml-auto w-auto py-1 pl-2.5 text-[13px] sm:w-48" opcoes={categorias} vazio="Todas as categorias" value={categoria} onChange={(e) => setCategoria(e.target.value)} />
       </div>
 
+      {/* tabela */}
       <Cartao className="overflow-hidden">
-        <div className="flex flex-col gap-3 border-b border-slate-100 p-3 sm:flex-row sm:items-center dark:border-slate-800">
-          <div className="relative flex-1">
-            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input className={cx(classeEntrada, "py-2 pl-9")} placeholder="Buscar…" value={busca} onChange={(e) => setBusca(e.target.value)} />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Abas
-              abas={[
-                ["todos", "Todos"],
-                ["aberto", "Em aberto"],
-                ["pago", despesa ? "Pagos" : "Recebidos"],
-              ]}
-              valor={status}
-              aoMudar={setStatus}
-            />
-            <Selecao className="py-1.5 text-sm sm:w-44" opcoes={categorias} vazio="Todas categorias" value={categoria} onChange={(e) => setCategoria(e.target.value)} />
-          </div>
+        <div className={cx("hidden items-center gap-3 border-b border-slate-100 bg-slate-50/80 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-slate-400 md:grid dark:border-slate-800 dark:bg-slate-900", GRADE)}>
+          <span />
+          <span>{despesa ? "Venc." : "Data"}</span>
+          <span>Descrição</span>
+          <span>Categoria</span>
+          <span className={SO_XL}>{despesa ? "Forma" : "Quem"}</span>
+          <span>Situação</span>
+          <span className="text-right">Valor</span>
+          <span className={SO_XL} />
         </div>
 
-        {lista.length === 0 ? (
+        {selecao && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-100 bg-emerald-50/70 px-3 py-1.5 text-[12.5px] text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
+            <span>Toque nas contas em aberto para selecionar.</span>
+            <button
+              className="font-semibold hover:underline"
+              onClick={() => setSelecao(selecao.size === abertosVisiveis.length ? new Set() : new Set(abertosVisiveis.map((x) => x.id)))}
+            >
+              {selecao.size === abertosVisiveis.length && abertosVisiveis.length > 0 ? "Limpar" : "Selecionar todas"}
+            </button>
+          </div>
+        )}
+
+        {atrasadas.length > 0 && (
+          <>
+            <div className="flex items-center justify-between border-b border-rose-100 bg-rose-50/70 px-3 py-1.5 dark:border-rose-500/20 dark:bg-rose-500/5">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-rose-600 dark:text-rose-400">
+                De meses anteriores · {atrasadas.length}
+              </span>
+              <span className="flex items-center gap-3">
+                <span className="num text-xs font-semibold text-rose-600 dark:text-rose-400">{brl(somar(atrasadas))}</span>
+                {!selecao && atrasadas.length > 1 && (
+                  <button onClick={() => setPagando(atrasadas)} className="text-xs font-semibold text-rose-700 hover:underline dark:text-rose-300">
+                    {despesa ? "Pagar todas" : "Receber todas"}
+                  </button>
+                )}
+              </span>
+            </div>
+            {atrasadas.map((x) => (
+              <Linha key={x.id} item={x} {...propsLinha} />
+            ))}
+            {lista.length > 0 && (
+              <div className="border-b border-slate-100 bg-slate-50/80 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:bg-slate-900">
+                {nomeMes(mes)}
+              </div>
+            )}
+          </>
+        )}
+
+        {visiveis.length === 0 ? (
           <Vazio
             icone={<Inbox size={24} />}
             titulo={doMes.length ? "Nada com esses filtros" : `Nenhuma ${despesa ? "despesa" : "receita"} em ${nomeMes(mes)}`}
@@ -125,107 +238,191 @@ export default function Lancamentos({ colecao }) {
             }
           />
         ) : (
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {lista.map((x) => (
-              <Linha key={x.id} item={x} colecao={colecao} campoData={campoData} hoje={h} />
-            ))}
-          </div>
+          lista.map((x) => <Linha key={x.id} item={x} {...propsLinha} />)
         )}
 
         {doMes.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-3 py-2.5 text-xs text-slate-500 dark:border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 bg-slate-50/80 px-3 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900">
             <span>
-              {lista.length} de {doMes.length} · filtrado: <b className="num text-slate-700 dark:text-slate-200">{brl(somar(lista))}</b>
+              {lista.length} de {doMes.length} lançamentos · <b className="num text-slate-700 dark:text-slate-200">{brl(somar(lista))}</b>
             </span>
-            <div className="flex gap-1">
-              {abertos > 0 && (
-                <Botao variante="fantasma" tamanho="sm" onClick={() => setConfirmar("pagar")}>
-                  <CheckCheck size={15} /> {despesa ? "Pagar todas" : "Receber todas"}
-                </Botao>
-              )}
-              {abertos < doMes.length && (
-                <Botao variante="fantasma" tamanho="sm" onClick={() => setConfirmar("reabrir")}>
-                  <RotateCcw size={15} /> Reabrir
-                </Botao>
-              )}
-            </div>
+            {emAberto.length < doMes.length && (
+              <button onClick={() => setReabrir(true)} className="inline-flex items-center gap-1 font-medium hover:text-slate-800 dark:hover:text-slate-200">
+                <RotateCcw size={13} /> Reabrir o mês
+              </button>
+            )}
           </div>
         )}
       </Cartao>
 
-      {confirmar && (
+      {selecao && (
+        <div className="fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 lg:bottom-6 lg:pl-64">
+          <div className="animar-subir flex w-full max-w-lg items-center gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-xl dark:bg-slate-100 dark:text-slate-900">
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold">{selecionados.length} selecionada(s)</div>
+              <div className="num text-xs opacity-75">{brl(somar(selecionados))}</div>
+            </div>
+            <Botao tamanho="sm" disabled={!selecionados.length} onClick={() => setPagando(selecionados)}>
+              <CheckCheck size={15} /> {despesa ? "Pagar" : "Receber"}
+            </Botao>
+            <button aria-label="Cancelar seleção" className="rounded-lg p-1.5 opacity-70 hover:opacity-100" onClick={() => setSelecao(null)}>
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {pagando && <ModalPagamento colecao={colecao} itens={pagando} aoFechar={() => setPagando(null)} aoConcluir={() => setSelecao(null)} />}
+
+      {reabrir && (
         <Confirmar
-          titulo={confirmar === "pagar" ? "Marcar tudo como " + (despesa ? "pago" : "recebido") : "Reabrir lançamentos"}
-          texto={
-            confirmar === "pagar"
-              ? `${abertos} lançamento(s) em aberto de ${nomeMes(mes)} serão marcados como ${despesa ? "pagos" : "recebidos"} hoje.`
-              : `${doMes.length - abertos} lançamento(s) de ${nomeMes(mes)} voltarão a ficar em aberto.`
-          }
-          aoConfirmar={() => app.gravar(marcarMes(app.dados, colecao, mes, confirmar === "pagar"), "Pronto!")}
-          aoFechar={() => setConfirmar(null)}
+          titulo="Reabrir lançamentos"
+          texto={`${doMes.length - emAberto.length} lançamento(s) de ${nomeMes(mes)} voltarão a ficar em aberto.`}
+          aoConfirmar={() => app.gravar(marcarMes(app.dados, colecao, mes, false), "Lançamentos reabertos")}
+          aoFechar={() => setReabrir(false)}
         />
       )}
     </div>
   );
 }
 
-function Resumo({ rotulo, valor, cor }) {
+function Numero({ rotulo, valor, cor, className }) {
   return (
-    <Cartao className="px-3.5 py-3">
-      <div className="text-xs text-slate-500">{rotulo}</div>
-      <div className={cx("num mt-0.5 truncate text-[15px] font-semibold sm:text-lg", cor)}>{brl(valor)}</div>
-    </Cartao>
+    <div className={cx("border-slate-100 px-3.5 py-2.5 dark:border-slate-800", className)}>
+      <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{rotulo}</div>
+      <div className={cx("num truncate text-[15px] font-semibold sm:text-base", cor)}>{brl(valor)}</div>
+    </div>
   );
 }
 
-function Linha({ item: x, colecao, campoData, hoje: h, mostrarMes }) {
+/** Saldo da conta ao final do mês exibido (real nos meses passados, previsto nos demais). */
+function SaldoFim({ info, calc }) {
+  const negativo = info.saldoFim < 0;
+  const explicacao = info.passado
+    ? "saldo real no fim do mês"
+    : info.atual
+      ? `hoje ${brl(calc.saldoAtual)} − contas em aberto${calc.atrasadas.despesas.length ? " e atrasadas" : ""}`
+      : "previsão considerando os meses anteriores";
+  return (
+    <div
+      className={cx(
+        "border-l border-t px-3.5 py-2.5 sm:border-t-0",
+        negativo ? "border-rose-100 bg-rose-50/80 dark:border-slate-800 dark:bg-rose-500/10" : "border-emerald-100 bg-emerald-50/70 dark:border-slate-800 dark:bg-emerald-500/10",
+      )}
+      title={explicacao}
+    >
+      <div className={cx("flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide", negativo ? "text-rose-600 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-400")}>
+        <Wallet size={12} /> {info.passado ? "Saldo no fim do mês" : "Saldo previsto no fim"}
+      </div>
+      <div className={cx("num truncate text-[15px] font-bold sm:text-base", negativo ? "text-rose-600 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-300")}>{brl(info.saldoFim)}</div>
+      <div className="hidden truncate text-[11px] text-slate-500 sm:block">{explicacao}</div>
+    </div>
+  );
+}
+
+const CORES_SITUACAO = {
+  pago: "text-emerald-700 bg-emerald-50 ring-emerald-600/15 dark:text-emerald-300 dark:bg-emerald-500/10",
+  atrasado: "text-rose-700 bg-rose-50 ring-rose-600/15 dark:text-rose-300 dark:bg-rose-500/10",
+  hoje: "text-amber-700 bg-amber-50 ring-amber-600/20 dark:text-amber-300 dark:bg-amber-500/10",
+  aberto: "text-slate-600 bg-slate-100 ring-slate-500/10 dark:text-slate-300 dark:bg-slate-800",
+};
+
+function Linha({ item: x, colecao, campoData, hoje: h, aoMarcar, selecao, corCat }) {
   const app = useApp();
   const abrirForm = useForm();
-  const pago = x.status === PAGO;
-  const vencida = !pago && x[campoData] && x[campoData] < h;
   const despesa = colecao === "despesas";
+  const pago = x.status === PAGO;
+  const data = x[campoData];
+  const dataPago = despesa ? x.pagoEm : x.recebidoEm;
+  const selecionando = !!selecao;
+  const marcado = selecionando && selecao.has(x.id);
+  const sit = pago
+    ? ["pago", `${despesa ? "Pago" : "Recebido"} ${dataCurta(dataPago)}`]
+    : data < h
+      ? ["atrasado", "Atrasado"]
+      : data === h
+        ? ["hoje", "Vence hoje"]
+        : ["aberto", "Em aberto"];
+  const abrir = () => (selecionando ? aoMarcar(x) : abrirForm(colecao, x));
+
   return (
-    <div className="group flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+    <div
+      className={cx(
+        "group grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-100 px-3 py-2 text-[13.5px] last:border-0 dark:border-slate-800/70",
+        GRADE,
+        marcado ? "bg-emerald-50/80 dark:bg-emerald-500/10" : "hover:bg-slate-50 dark:hover:bg-slate-800/40",
+        selecionando && pago && "opacity-50",
+      )}
+    >
       <button
-        onClick={() => app.gravar(alternarStatus(colecao, x))}
-        title={pago ? "Marcar como em aberto" : despesa ? "Marcar como paga" : "Marcar como recebida"}
-        aria-label={pago ? "Marcar como em aberto" : "Marcar como paga"}
+        onClick={() => aoMarcar(x)}
+        disabled={selecionando && pago}
+        title={selecionando ? "Selecionar" : pago ? "Voltar para em aberto" : despesa ? "Registrar pagamento" : "Registrar recebimento"}
+        aria-label={selecionando ? `Selecionar ${x.descricao}` : pago ? "Voltar para em aberto" : despesa ? "Registrar pagamento" : "Registrar recebimento"}
+        aria-pressed={selecionando ? marcado : undefined}
         className={cx(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition",
-          pago ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 text-transparent hover:border-emerald-500 hover:text-emerald-500 dark:border-slate-600",
+          "flex h-5 w-5 items-center justify-center border transition",
+          selecionando ? "rounded-md" : "rounded-full",
+          pago || marcado ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 text-transparent hover:border-emerald-500 hover:text-emerald-500 dark:border-slate-600",
         )}
       >
-        <Check size={16} strokeWidth={3} />
+        <Check size={12} strokeWidth={3.2} />
       </button>
-      <button className="min-w-0 flex-1 text-left" onClick={() => abrirForm(colecao, x)}>
-        <div className={cx("truncate text-[14.5px] font-medium", pago && "text-slate-500 line-through decoration-slate-300 dark:decoration-slate-600")}>{x.descricao}</div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-          <span className={cx(vencida && "font-semibold text-rose-600 dark:text-rose-400")}>
-            {mostrarMes ? nomeMes(x.mes, true) + " · " : ""}
-            {vencida ? "venceu " : ""}
-            {dataCurta(x[campoData])}
-          </span>
-          {x.categoria && <Selo>{x.categoria}</Selo>}
-          {x.responsavel && <span className="hidden sm:inline">{x.responsavel}</span>}
-          {x.recId && <Repeat size={12} className="text-slate-400" aria-label="Conta fixa" />}
+
+      <span className={cx("num hidden text-slate-500 md:block", sit[0] === "atrasado" && "font-medium text-rose-600 dark:text-rose-400")}>{dataCurta(data)}</span>
+
+      <button onClick={abrir} className="min-w-0 text-left">
+        <div className={cx("flex items-center gap-1.5 truncate font-medium", pago && "text-slate-400 dark:text-slate-500")}>
+          <span className="truncate">{x.descricao}</span>
+          {x.recId && <Repeat size={11} className="shrink-0 text-slate-400" aria-label="Conta fixa" />}
+        </div>
+        <div className="truncate text-[11.5px] text-slate-400 md:hidden">
+          <span className={cx(sit[0] === "atrasado" && "font-medium text-rose-500")}>{pago ? sit[1].toLowerCase() : (sit[0] === "atrasado" ? "venceu " : "vence ") + dataCurta(data)}</span>
+          {" · "}
+          {x.categoria}
         </div>
       </button>
-      <div className={cx("num shrink-0 text-right text-[15px] font-semibold", despesa ? "text-slate-800 dark:text-slate-100" : "text-emerald-600 dark:text-emerald-400")}>{brl(x.valor)}</div>
-      <div className="hidden shrink-0 gap-0.5 opacity-0 transition group-hover:opacity-100 sm:flex">
-        <BotaoIcone titulo="Editar" onClick={() => abrirForm(colecao, x)} className="h-8 w-8">
-          <Pencil size={15} />
-        </BotaoIcone>
-        <BotaoIcone
-          titulo="Duplicar"
-          className="h-8 w-8"
-          onClick={() => app.gravar(salvarLancamento(colecao, { ...x, id: null, status: "pendente", recId: null, rendaId: null, criadoEm: null }), "Duplicado")}
-        >
-          <Copy size={15} />
-        </BotaoIcone>
-        <BotaoIcone titulo="Excluir" className="h-8 w-8 hover:!text-rose-600" onClick={() => app.excluirComDesfazer(excluir(colecao, x.id), `“${x.descricao}” excluída`)}>
-          <Trash2 size={15} />
-        </BotaoIcone>
-      </div>
+
+      <span className="hidden min-w-0 items-center gap-2 text-slate-600 md:flex dark:text-slate-300">
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: corCat(x.categoria) }} />
+        <span className="truncate">{x.categoria}</span>
+      </span>
+      <span className={cx(SO_XL, "truncate text-slate-500")}>{(despesa ? x.forma : x.responsavel) || "—"}</span>
+      <span className="hidden md:block">
+        <span className={cx("inline-flex max-w-full truncate rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset", CORES_SITUACAO[sit[0]])}>{sit[1]}</span>
+      </span>
+
+      <span className={cx("num text-right font-semibold", pago ? "text-slate-400 dark:text-slate-500" : despesa ? "" : "text-emerald-600 dark:text-emerald-400")}>{brl(x.valor)}</span>
+
+      <span className="hidden justify-end gap-0.5 opacity-0 transition group-hover:opacity-100 xl:flex">
+        {!selecionando && (
+          <>
+            <AcaoIcone titulo="Editar" onClick={() => abrirForm(colecao, x)}>
+              <Pencil size={13.5} />
+            </AcaoIcone>
+            <AcaoIcone titulo="Duplicar" onClick={() => app.gravar(salvarLancamento(colecao, { ...x, id: null, status: "pendente", recId: null, rendaId: null, criadoEm: null }), "Duplicado")}>
+              <Copy size={13.5} />
+            </AcaoIcone>
+            <AcaoIcone titulo="Excluir" perigo onClick={() => app.excluirComDesfazer(excluir(colecao, x.id), `“${x.descricao}” excluída`)}>
+              <Trash2 size={13.5} />
+            </AcaoIcone>
+          </>
+        )}
+      </span>
     </div>
+  );
+}
+
+function AcaoIcone({ titulo, perigo, children, ...p }) {
+  return (
+    <button
+      type="button"
+      title={titulo}
+      aria-label={titulo}
+      className={cx("rounded-md p-1 text-slate-400 hover:bg-slate-200/70 dark:hover:bg-slate-700", perigo ? "hover:text-rose-600" : "hover:text-slate-700 dark:hover:text-slate-200")}
+      {...p}
+    >
+      {children}
+    </button>
   );
 }

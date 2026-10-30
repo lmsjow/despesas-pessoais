@@ -13,8 +13,6 @@ import {
   Menu,
   Eye,
   EyeOff,
-  Moon,
-  Sun,
   Cloud,
   CloudOff,
   RefreshCw,
@@ -25,6 +23,7 @@ import { useApp } from "../contexto.jsx";
 import { brl } from "../lib/dinheiro.js";
 import { BotaoIcone, Modal, cx } from "../ui/base.jsx";
 import Logo from "../ui/Logo.jsx";
+import { MenuTema } from "../ui/SeletorTema.jsx";
 import Painel from "./Painel.jsx";
 import Lancamentos from "./Lancamentos.jsx";
 import FormLancamento from "./FormLancamento.jsx";
@@ -185,9 +184,7 @@ function Topo({ aoMenu }) {
         <BotaoIcone titulo={app.ocultar ? "Mostrar valores" : "Esconder valores"} onClick={app.alternarOcultar}>
           {app.ocultar ? <EyeOff size={18} /> : <Eye size={18} />}
         </BotaoIcone>
-        <BotaoIcone titulo={app.tema === "escuro" ? "Tema claro" : "Tema escuro"} onClick={app.alternarTema}>
-          {app.tema === "escuro" ? <Sun size={18} /> : <Moon size={18} />}
-        </BotaoIcone>
+        <MenuTema />
         <BotaoIcone titulo="Menu" onClick={aoMenu} className="lg:hidden">
           <Menu size={19} />
         </BotaoIcone>
