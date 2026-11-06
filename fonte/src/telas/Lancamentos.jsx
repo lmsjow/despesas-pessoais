@@ -269,8 +269,8 @@ export default function Lancamentos({ colecao }) {
         <Selecao className="ml-auto w-auto py-1 pl-2.5 text-[13px] sm:w-48" opcoes={categorias} vazio="Todas as categorias" value={categoria} onChange={(e) => setCategoria(e.target.value)} />
       </div>
 
-      {/* tabela */}
-      <Cartao className="overflow-hidden">
+      {/* tabela — overflow-clip (e não hidden) para o cabeçalho de mês sticky grudar na tela, não no cartão */}
+      <Cartao className="overflow-clip">
         <div className={cx("hidden items-center gap-3 border-b border-slate-100 bg-slate-50/80 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-slate-400 md:grid dark:border-slate-800 dark:bg-slate-900", GRADE)}>
           <span />
           <span>{despesa ? "Venc." : "Data"}</span>
