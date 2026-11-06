@@ -69,7 +69,7 @@ export default function Projecao() {
               <Tooltip content={<DicaGrafico />} />
               <ReferenceLine y={0} stroke={cores.despesa} strokeDasharray="4 4" />
               <ReferenceLine x={nomeMes(calc.atual, true)} stroke={cores.texto} strokeDasharray="2 4" label={{ value: "hoje", fontSize: 11, fill: cores.texto, position: "insideTopRight" }} />
-              <Area type="monotone" dataKey="Saldo" stroke={cores.projetado} strokeWidth={2.5} fill="url(#gs)" />
+              <Area isAnimationActive={false} type="monotone" dataKey="Saldo" stroke={cores.projetado} strokeWidth={2.5} fill="url(#gs)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>

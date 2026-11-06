@@ -73,7 +73,7 @@ export function AbasTema() {
           className={cx(
             "flex flex-col items-center gap-1.5 rounded-xl border px-3 py-3 text-sm font-medium transition",
             preferenciaTema === v
-              ? "border-emerald-500 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
+              ? "border-slate-900 bg-slate-900/[0.03] text-slate-900 ring-2 ring-slate-900/10 dark:border-white dark:bg-white/[0.06] dark:text-white dark:ring-white/10"
               : "border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800",
           )}
         >

@@ -92,7 +92,7 @@ export default function Relatorios() {
               <div className="h-52 w-52 shrink-0">
                 <ResponsiveContainer>
                   <PieChart>
-                    <Pie data={porCat} dataKey="valor" nameKey="nome" innerRadius="62%" outerRadius="100%" paddingAngle={1.5} stroke="none">
+                    <Pie isAnimationActive={false} data={porCat} dataKey="valor" nameKey="nome" innerRadius="62%" outerRadius="100%" paddingAngle={1.5} stroke="none">
                       {porCat.map((c) => (
                         <Cell key={c.nome} fill={corCat(c.nome)} />
                       ))}
@@ -153,9 +153,9 @@ export default function Relatorios() {
               <Tooltip content={<DicaGrafico />} cursor={{ fill: cores.cursor }} />
               <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
               {topCats.map((c) => (
-                <Bar key={c} dataKey={c} stackId="a" fill={corCat(c)} maxBarSize={36} />
+                <Bar isAnimationActive={false} key={c} dataKey={c} stackId="a" fill={corCat(c)} maxBarSize={36} />
               ))}
-              <Bar dataKey="Outras" stackId="a" fill="#94a3b8" radius={[5, 5, 0, 0]} maxBarSize={36} />
+              <Bar isAnimationActive={false} dataKey="Outras" stackId="a" fill="#94a3b8" radius={[5, 5, 0, 0]} maxBarSize={36} />
             </BarChart>
           </ResponsiveContainer>
         </div>

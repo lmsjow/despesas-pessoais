@@ -6,8 +6,8 @@ export function useCoresGrafico() {
   const { tema } = useApp();
   const escuro = tema === "escuro";
   return {
-    grade: escuro ? "#1e293b" : "#e2e8f0",
-    texto: escuro ? "#94a3b8" : "#64748b",
+    grade: escuro ? "#27272a" : "#ececee",
+    texto: escuro ? "#a1a1aa" : "#71717a",
     receita: "#10b981",
     despesa: escuro ? "#fb7185" : "#f43f5e",
     projetado: escuro ? "#818cf8" : "#6366f1",
@@ -20,7 +20,7 @@ export const eixo = (cores) => ({ tick: { fontSize: 11, fill: cores.texto }, axi
 export const formatoEixo = (v) => {
   const curto = brlCurto(v);
   if (curto.includes("•")) return curto;
-  return Math.abs(v) >= 1000 ? curto.replace(/^R\$\s/, "") : Math.round(v).toLocaleString("pt-BR");
+  return Math.abs(v) >= 1000 ? curto.replace(/^R\$\s/, "").replace(" mil", "k") : Math.round(v).toLocaleString("pt-BR");
 };
 
 export function DicaGrafico({ active, payload, label }) {

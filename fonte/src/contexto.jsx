@@ -52,7 +52,7 @@ export function ProvedorApp({ armazenamento, dados, sincronia, usuario, aoSair, 
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", tema === "escuro");
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", tema === "escuro" ? "#020617" : "#f1f5f9");
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", tema === "escuro" ? "#09090b" : "#f4f4f5");
   }, [tema]);
   useEffect(() => salvarPref("tema", preferenciaTema), [preferenciaTema]);
   useEffect(() => salvarPref("ocultar", ocultar), [ocultar]);

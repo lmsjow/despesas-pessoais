@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Plus, FileDown, CheckCheck, RotateCcw, Check, Copy, Trash2, Pencil, Inbox, Repeat, ListChecks, X, Wallet, ChevronDown } from "lucide-react";
+import { Search, Plus, FileDown, CheckCheck, RotateCcw, Check, Copy, Trash2, Pencil, Inbox, Repeat, ListChecks, X, Wallet, ChevronDown, CalendarRange } from "lucide-react";
 import { useApp } from "../contexto.jsx";
 import { useForm } from "./formContexto.js";
 import { alternarStatus, excluir, marcarMes, salvarLancamento } from "../dados/acoes.js";
@@ -8,7 +8,7 @@ import { dataCurta, hoje, nomeMes } from "../lib/datas.js";
 import { PAGO, composicaoSaldo } from "../lib/calculos.js";
 import { CORES } from "../lib/categorias.js";
 import { gerarRelatorioPdf } from "../lib/relatorioPdf.js";
-import { Botao, Cartao, Confirmar, Modal, SeletorMes, Selecao, Vazio, classeEntrada, cx } from "../ui/base.jsx";
+import { Abas, Botao, Cartao, Confirmar, Modal, SeletorMes, Selecao, Vazio, classeEntrada, cx } from "../ui/base.jsx";
 import ModalPagamento from "./ModalPagamento.jsx";
 import CalculoSaldo from "./CalculoSaldo.jsx";
 
@@ -45,22 +45,29 @@ export default function Lancamentos({ colecao }) {
     };
   }, [verCalculo]);
   const [selecao, setSelecao] = useState(null); // null = fora do modo seleção; Set de ids dentro dele
+  const [todosMeses, setTodosMeses] = useState(false); // busca em todos os meses
+  const [excluirSel, setExcluirSel] = useState(false);
 
+  const ordenar = (a, b) => (a.mes || "").localeCompare(b.mes || "") || (a[campoData] || "").localeCompare(b[campoData] || "") || a.descricao.localeCompare(b.descricao);
   const doMes = useMemo(
-    () => Object.values(app.dados[colecao]).filter((x) => x.mes === mes).sort((a, b) => (a[campoData] || "").localeCompare(b[campoData] || "") || a.descricao.localeCompare(b.descricao)),
-    [app.dados, colecao, mes, campoData],
+    () =>
+      Object.values(app.dados[colecao])
+        .filter((x) => todosMeses || x.mes === mes)
+        .sort(ordenar),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [app.dados, colecao, mes, campoData, todosMeses],
   );
   const termo = busca.trim().toLowerCase();
-  const filtrar = (x) =>
-    (status === "todos" || (status === "pago" ? x.status === PAGO : x.status !== PAGO)) &&
-    (!categoria || x.categoria === categoria) &&
-    (!termo || `${x.descricao} ${x.obs} ${x.responsavel} ${x.categoria}`.toLowerCase().includes(termo));
+  const passaOutrosFiltros = (x) => (!categoria || x.categoria === categoria) && (!termo || `${x.descricao} ${x.obs} ${x.responsavel} ${x.categoria}`.toLowerCase().includes(termo));
+  const filtrar = (x) => (status === "todos" || (status === "pago" ? x.status === PAGO : x.status !== PAGO)) && passaOutrosFiltros(x);
   const lista = doMes.filter(filtrar);
 
-  const atual = mes === app.calc.atual;
+  const atual = !todosMeses && mes === app.calc.atual;
   const atrasadas = atual ? (despesa ? app.calc.atrasadas.despesas : app.calc.atrasadas.receitas).filter(filtrar) : [];
-  const total = somar(doMes);
-  const pago = somar(doMes.filter((x) => x.status === PAGO));
+  // no modo "todos os meses" o resumo é do resultado da busca
+  const base = todosMeses ? lista : doMes;
+  const total = somar(base);
+  const pago = somar(base.filter((x) => x.status === PAGO));
   const emAberto = doMes.filter((x) => x.status !== PAGO);
   const categorias = despesa ? app.dados.config.categoriasDespesa : app.dados.config.categoriasReceita;
   const corCat = (c) => CORES[Math.max(0, categorias.indexOf(c)) % CORES.length];
@@ -80,7 +87,18 @@ export default function Lancamentos({ colecao }) {
 
   const visiveis = [...atrasadas, ...lista];
   const selecionados = selecao ? visiveis.filter((x) => selecao.has(x.id)) : [];
-  const abertosVisiveis = visiveis.filter((x) => x.status !== PAGO);
+  const selecionadosAbertos = selecionados.filter((x) => x.status !== PAGO);
+
+  // agrupa por mês quando a lista cobre vários meses
+  const gruposMes = [];
+  if (todosMeses) for (const x of lista) (gruposMes.at(-1)?.mes === x.mes ? gruposMes.at(-1) : gruposMes[gruposMes.push({ mes: x.mes, itens: [] }) - 1]).itens.push(x);
+
+  function excluirSelecionados() {
+    const mudancas = {};
+    for (const x of selecionados) Object.assign(mudancas, excluir(colecao, x.id));
+    app.excluirComDesfazer(mudancas, `${selecionados.length} lançamento(s) excluído(s)`);
+    setSelecao(null);
+  }
 
   function alternarSelecao(id) {
     setSelecao((s) => {
@@ -92,7 +110,7 @@ export default function Lancamentos({ colecao }) {
 
   /** Círculo: em aberto → pede a data; pago → reabre com opção de desfazer. */
   function aoMarcar(x) {
-    if (selecao) return x.status !== PAGO && alternarSelecao(x.id);
+    if (selecao) return alternarSelecao(x.id);
     if (x.status !== PAGO) return pagar([x]);
     app.gravar(alternarStatus(colecao, x));
     app.avisar(`“${x.descricao}” voltou para em aberto`, {
@@ -104,6 +122,7 @@ export default function Lancamentos({ colecao }) {
     const r = gerarRelatorioPdf({
       itens: lista,
       mes,
+      periodo: todosMeses ? "Todos os meses" : undefined,
       filtros: [status !== "todos" && (status === "pago" ? "Pagas" : "Em aberto"), categoria, termo && `busca “${busca.trim()}”`].filter(Boolean).join(" · "),
       saldoAtual: app.calc.saldoAtual,
       fimDoMes: app.calc.mesAtual?.saldoFim,
@@ -114,35 +133,63 @@ export default function Lancamentos({ colecao }) {
   }
 
   const propsLinha = { colecao, campoData, hoje: h, aoMarcar, selecao, corCat };
-  const contagem = (f) => doMes.filter(f).length;
+  // quantos itens cada aba de situação mostraria, respeitando busca e categoria
+  const contagem = (s) => doMes.filter((x) => passaOutrosFiltros(x) && (s === "todos" || (s === "pago" ? x.status === PAGO : x.status !== PAGO))).length;
 
   return (
     <div className="space-y-3">
       {/* barra de ferramentas */}
       <div className="flex flex-wrap items-center gap-2">
-        <SeletorMes
-          mes={mes}
-          aoMudar={(m) => {
-            setMes(m);
+        {todosMeses ? (
+          <div className="flex h-10 items-center gap-2 rounded-[10px] bg-slate-900 px-3.5 text-[13.5px] font-semibold text-white dark:bg-white dark:text-slate-900">
+            <CalendarRange size={15} /> Todos os meses
+          </div>
+        ) : (
+          <SeletorMes
+            mes={mes}
+            aoMudar={(m) => {
+              setMes(m);
+              setSelecao(null);
+            }}
+          />
+        )}
+        <div className="relative min-w-40 flex-1 sm:max-w-72">
+          <Search size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            className={cx(classeEntrada, "py-1.5 pl-8 pr-8 text-sm")}
+            placeholder={todosMeses ? "Buscar em todos os meses" : "Buscar"}
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+          {busca && (
+            <button aria-label="Limpar busca" onClick={() => setBusca("")} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-700">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        <Abas
+          abas={[
+            ["mes", "Este mês"],
+            ["todos", "Todos os meses"],
+          ]}
+          valor={todosMeses ? "todos" : "mes"}
+          aoMudar={(v) => {
+            setTodosMeses(v === "todos");
             setSelecao(null);
           }}
         />
-        <div className="relative min-w-40 flex-1 sm:max-w-64">
-          <Search size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input className={cx(classeEntrada, "py-1.5 pl-8 text-sm")} placeholder="Buscar" value={busca} onChange={(e) => setBusca(e.target.value)} />
-        </div>
         <div className="ml-auto flex flex-wrap gap-2">
           {despesa && (
             <Botao variante="secundario" tamanho="sm" onClick={pdf} title="Gerar relatório para imprimir ou salvar em PDF">
               <FileDown size={15} /> <span className="hidden sm:inline">PDF</span>
             </Botao>
           )}
-          {emAberto.length + atrasadas.length > 0 && (
+          {visiveis.length > 0 && (
             <Botao variante="secundario" tamanho="sm" onClick={() => setSelecao(selecao ? null : new Set())}>
               <ListChecks size={15} /> <span className="hidden sm:inline">{selecao ? "Cancelar seleção" : "Selecionar"}</span>
             </Botao>
           )}
-          {emAberto.length > 0 && (
+          {!todosMeses && emAberto.length > 0 && (
             <Botao variante="secundario" tamanho="sm" onClick={() => pagar(emAberto)}>
               <CheckCheck size={15} /> {despesa ? "Pagar todas" : "Receber todas"} <span className="text-slate-400">{emAberto.length}</span>
             </Botao>
@@ -158,11 +205,19 @@ export default function Lancamentos({ colecao }) {
       {/* resumo */}
       <div ref={refResumo} className="relative">
       <Cartao className="overflow-hidden">
-        <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-5 dark:bg-slate-800">
-          <Numero rotulo={despesa ? "Despesas do mês" : "Receitas do mês"} valor={total} />
+        <div className={cx("grid grid-cols-2 gap-px bg-slate-100 dark:bg-slate-800", todosMeses ? "sm:grid-cols-4" : "sm:grid-cols-5")}>
+          <Numero rotulo={todosMeses ? (termo || categoria ? "Total encontrado" : "Total de todos os meses") : despesa ? "Despesas do mês" : "Receitas do mês"} valor={total} />
           <Numero rotulo={despesa ? "Pago" : "Recebido"} valor={pago} cor="text-emerald-600 dark:text-emerald-400" />
           <Numero rotulo={despesa ? "A pagar" : "A receber"} valor={total - pago} cor={despesa ? "text-rose-600 dark:text-rose-400" : "text-sky-600 dark:text-sky-400"} />
-          {infoMes && (
+          {todosMeses && (
+            <div className="bg-white px-3.5 py-2.5 dark:bg-slate-900">
+              <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Lançamentos</div>
+              <div className="num text-[15px] font-semibold sm:text-base">
+                {lista.length} <span className="text-[12px] font-normal text-slate-400">em {gruposMes.length} {gruposMes.length === 1 ? "mês" : "meses"}</span>
+              </div>
+            </div>
+          )}
+          {!todosMeses && infoMes && (
             <Numero
               rotulo={despesa ? "A receber" : "A pagar"}
               valor={despesa ? infoMes.aReceber : infoMes.aPagar}
@@ -170,7 +225,7 @@ export default function Lancamentos({ colecao }) {
               dica={despesa ? "receitas do mês ainda não recebidas" : "despesas do mês ainda não pagas"}
             />
           )}
-          {infoMes && <SaldoFim info={infoMes} aberto={!!verCalculo} aoAlternar={alternarCalculo} />}
+          {!todosMeses && infoMes && <SaldoFim info={infoMes} aberto={!!verCalculo} aoAlternar={alternarCalculo} />}
         </div>
         <div className="flex items-center gap-3 border-t border-slate-100 px-3.5 py-2 dark:border-slate-800">
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
@@ -196,9 +251,9 @@ export default function Lancamentos({ colecao }) {
       {/* filtros */}
       <div className="flex flex-wrap items-center gap-1.5">
         {[
-          ["todos", "Todas", doMes.length],
-          ["aberto", "Em aberto", emAberto.length],
-          ["pago", despesa ? "Pagas" : "Recebidas", contagem((x) => x.status === PAGO)],
+          ["todos", "Todas", contagem("todos")],
+          ["aberto", "Em aberto", contagem("aberto")],
+          ["pago", despesa ? "Pagas" : "Recebidas", contagem("pago")],
         ].map(([v, r, n]) => (
           <button
             key={v}
@@ -229,12 +284,9 @@ export default function Lancamentos({ colecao }) {
 
         {selecao && (
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-100 bg-emerald-50/70 px-3 py-1.5 text-[12.5px] text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
-            <span>Toque nas contas em aberto para selecionar.</span>
-            <button
-              className="font-semibold hover:underline"
-              onClick={() => setSelecao(selecao.size === abertosVisiveis.length ? new Set() : new Set(abertosVisiveis.map((x) => x.id)))}
-            >
-              {selecao.size === abertosVisiveis.length && abertosVisiveis.length > 0 ? "Limpar" : "Selecionar todas"}
+            <span>Toque nos lançamentos para selecionar. Depois escolha pagar ou excluir.</span>
+            <button className="font-semibold hover:underline" onClick={() => setSelecao(selecao.size === visiveis.length ? new Set() : new Set(visiveis.map((x) => x.id)))}>
+              {selecao.size === visiveis.length && visiveis.length > 0 ? "Limpar" : `Selecionar todos (${visiveis.length})`}
             </button>
           </div>
         )}
@@ -268,26 +320,64 @@ export default function Lancamentos({ colecao }) {
         {visiveis.length === 0 ? (
           <Vazio
             icone={<Inbox size={24} />}
-            titulo={doMes.length ? "Nada com esses filtros" : `Nenhuma ${despesa ? "despesa" : "receita"} em ${nomeMes(mes)}`}
-            texto={doMes.length ? null : "Lance manualmente ou gere os meses a partir das contas fixas."}
+            titulo={doMes.length || todosMeses ? "Nada com esses filtros" : `Nenhuma ${despesa ? "despesa" : "receita"} em ${nomeMes(mes)}`}
+            texto={doMes.length || todosMeses ? (termo && !todosMeses ? `Nada com “${busca.trim()}” em ${nomeMes(mes)}.` : null) : "Lance manualmente ou gere os meses a partir das contas fixas."}
             acao={
-              !doMes.length && (
-                <Botao variante="secundario" onClick={() => app.irPara("recorrentes")}>
-                  <Repeat size={16} /> Contas fixas
+              termo && !todosMeses ? (
+                <Botao variante="secundario" onClick={() => setTodosMeses(true)}>
+                  <CalendarRange size={16} /> Buscar em todos os meses
                 </Botao>
+              ) : (
+                !doMes.length &&
+                !todosMeses && (
+                  <Botao variante="secundario" onClick={() => app.irPara("recorrentes")}>
+                    <Repeat size={16} /> Contas fixas
+                  </Botao>
+                )
               )
             }
           />
+        ) : todosMeses ? (
+          gruposMes.map((g) => (
+            <div key={g.mes}>
+              <div className="sticky top-14 z-10 flex items-center justify-between border-b border-slate-100 bg-slate-50/95 px-3 py-1.5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {nomeMes(g.mes)} · {g.itens.length}
+                </span>
+                <span className="flex items-center gap-3">
+                  <span className="num text-xs font-semibold text-slate-600 dark:text-slate-300">{brl(somar(g.itens))}</span>
+                  {selecao && (
+                    <button
+                      onClick={() =>
+                        setSelecao((s) => {
+                          const n = new Set(s);
+                          const todos = g.itens.every((x) => n.has(x.id));
+                          for (const x of g.itens) todos ? n.delete(x.id) : n.add(x.id);
+                          return n;
+                        })
+                      }
+                      className="text-xs font-semibold text-slate-700 hover:underline dark:text-slate-200"
+                    >
+                      {g.itens.every((x) => selecao.has(x.id)) ? "Desmarcar mês" : "Marcar mês"}
+                    </button>
+                  )}
+                </span>
+              </div>
+              {g.itens.map((x) => (
+                <Linha key={x.id} item={x} {...propsLinha} />
+              ))}
+            </div>
+          ))
         ) : (
           lista.map((x) => <Linha key={x.id} item={x} {...propsLinha} />)
         )}
 
-        {doMes.length > 0 && (
+        {(doMes.length > 0 || todosMeses) && visiveis.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 bg-slate-50/80 px-3 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900">
             <span>
-              {lista.length} de {doMes.length} lançamentos · <b className="num text-slate-700 dark:text-slate-200">{brl(somar(lista))}</b>
+              {lista.length} de {doMes.length} lançamentos{todosMeses ? " (todos os meses)" : ""} · <b className="num text-slate-700 dark:text-slate-200">{brl(somar(lista))}</b>
             </span>
-            {emAberto.length < doMes.length && (
+            {!todosMeses && emAberto.length < doMes.length && (
               <button onClick={() => setReabrir(true)} className="inline-flex items-center gap-1 font-medium hover:text-slate-800 dark:hover:text-slate-200">
                 <RotateCcw size={13} /> Reabrir o mês
               </button>
@@ -300,12 +390,25 @@ export default function Lancamentos({ colecao }) {
         <div className="fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 lg:bottom-6 lg:pl-64">
           <div className="animar-subir flex w-full max-w-lg items-center gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-xl dark:bg-slate-100 dark:text-slate-900">
             <div className="min-w-0 flex-1">
-              <div className="font-semibold">{selecionados.length} selecionada(s)</div>
+              <div className="font-semibold">{selecionados.length} selecionado(s)</div>
               <div className="num text-xs opacity-75">{brl(somar(selecionados))}</div>
             </div>
-            <Botao tamanho="sm" disabled={!selecionados.length} onClick={() => pagar(selecionados)}>
+            <button
+              disabled={!selecionadosAbertos.length}
+              onClick={() => pagar(selecionadosAbertos)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-white/10 px-3 text-[13px] font-medium ring-1 ring-inset ring-white/15 transition hover:bg-white/20 disabled:opacity-35 dark:bg-slate-900/10 dark:ring-slate-900/15 dark:hover:bg-slate-900/20"
+              title={selecionadosAbertos.length < selecionados.length ? "Só os itens em aberto serão pagos" : undefined}
+            >
               <CheckCheck size={15} /> {despesa ? "Pagar" : "Receber"}
-            </Botao>
+              {selecionadosAbertos.length > 0 && selecionadosAbertos.length < selecionados.length && <span className="opacity-70">{selecionadosAbertos.length}</span>}
+            </button>
+            <button
+              disabled={!selecionados.length}
+              onClick={() => setExcluirSel(true)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-rose-600 px-3 text-[13px] font-medium text-white transition hover:bg-rose-500 disabled:opacity-35"
+            >
+              <Trash2 size={15} /> Excluir
+            </button>
             <button aria-label="Cancelar seleção" className="rounded-lg p-1.5 opacity-70 hover:opacity-100" onClick={() => setSelecao(null)}>
               <X size={18} />
             </button>
@@ -314,6 +417,19 @@ export default function Lancamentos({ colecao }) {
       )}
 
       {pagando && <ModalPagamento colecao={pagando.colecao} itens={pagando.itens} aoFechar={() => setPagando(null)} aoConcluir={() => setSelecao(null)} />}
+
+      {excluirSel && (
+        <Confirmar
+          titulo={`Excluir ${selecionados.length} lançamento(s)`}
+          perigo
+          rotulo="Excluir"
+          texto={`${selecionados.length} ${despesa ? "despesa(s)" : "receita(s)"} somando ${brl(somar(selecionados))} serão excluídas${
+            new Set(selecionados.map((x) => x.mes)).size > 1 ? `, de ${new Set(selecionados.map((x) => x.mes)).size} meses diferentes` : ""
+          }. Logo depois aparece a opção de desfazer.`}
+          aoConfirmar={excluirSelecionados}
+          aoFechar={() => setExcluirSel(false)}
+        />
+      )}
 
       {reabrir && (
         <Confirmar
@@ -389,20 +505,24 @@ function Linha({ item: x, colecao, campoData, hoje: h, aoMarcar, selecao, corCat
       className={cx(
         "group grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-100 px-3 py-2 text-[13.5px] last:border-0 dark:border-slate-800/70",
         GRADE,
-        marcado ? "bg-emerald-50/80 dark:bg-emerald-500/10" : "hover:bg-slate-50 dark:hover:bg-slate-800/40",
-        selecionando && pago && "opacity-50",
+        marcado ? "bg-slate-900/[0.04] dark:bg-white/[0.06]" : "hover:bg-slate-50 dark:hover:bg-slate-800/40",
       )}
     >
       <button
         onClick={() => aoMarcar(x)}
-        disabled={selecionando && pago}
         title={selecionando ? "Selecionar" : pago ? "Voltar para em aberto" : despesa ? "Registrar pagamento" : "Registrar recebimento"}
         aria-label={selecionando ? `Selecionar ${x.descricao}` : pago ? "Voltar para em aberto" : despesa ? "Registrar pagamento" : "Registrar recebimento"}
         aria-pressed={selecionando ? marcado : undefined}
         className={cx(
           "flex h-5 w-5 items-center justify-center border transition",
           selecionando ? "rounded-md" : "rounded-full",
-          pago || marcado ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 text-transparent hover:border-emerald-500 hover:text-emerald-500 dark:border-slate-600",
+          selecionando
+            ? marcado
+              ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
+              : "border-slate-300 text-transparent hover:border-slate-500 dark:border-slate-600"
+            : pago
+              ? "border-emerald-500 bg-emerald-500 text-white"
+              : "border-slate-300 text-transparent hover:border-emerald-500 hover:text-emerald-500 dark:border-slate-600",
         )}
       >
         <Check size={12} strokeWidth={3.2} />

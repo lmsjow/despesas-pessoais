@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend, ReferenceLine } from "recharts";
-import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Check, ChevronRight, Scale, Wallet, Gauge, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Check, ChevronRight, Scale, Wallet, Gauge, SlidersHorizontal, TrendingUp } from "lucide-react";
 import { useApp } from "../contexto.jsx";
 import { brl, pct } from "../lib/dinheiro.js";
 import { dataBR, dataCurta, hoje, nomeMes, somarMeses } from "../lib/datas.js";
@@ -55,30 +55,39 @@ export default function Painel() {
   return (
     <div className="space-y-5">
       {/* Saldo */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-700 p-5 text-white shadow-lg shadow-emerald-700/20 sm:p-7">
-        <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-white/10" />
-        <div className="pointer-events-none absolute -bottom-24 right-24 h-48 w-48 rounded-full bg-white/5" />
-        <div className="relative flex flex-wrap items-end justify-between gap-5">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[13px] font-medium text-emerald-50/90">
-              <Wallet size={16} /> Saldo em conta
+      <div className="relative overflow-hidden rounded-[22px] bg-slate-950 p-5 text-white shadow-[0_20px_40px_-20px_rgba(0,0,0,.45)] ring-1 ring-white/[0.08] sm:p-7">
+        {/* brilho e grade sutis */}
+        <div className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-emerald-500/25 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-40 left-1/4 h-72 w-72 rounded-full bg-teal-400/10 blur-3xl" />
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.07]"
+          style={{ backgroundImage: "linear-gradient(rgba(255,255,255,.6) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.6) 1px,transparent 1px)", backgroundSize: "32px 32px", maskImage: "radial-gradient(ellipse at 80% 0%,#000 10%,transparent 70%)" }}
+        />
+        <div className="relative">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-[13px] font-medium text-white/60">
+              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/10 ring-1 ring-white/10">
+                <Wallet size={13} />
+              </span>
+              Saldo em conta
             </div>
-            <div className="num mt-1 text-4xl font-bold tracking-tight sm:text-5xl">{brl(calc.saldoAtual)}</div>
-            <div className="mt-2 text-[13px] text-emerald-50/90">
-              Previsto para o fim de {nomeMes(calc.atual).split(" ")[0].toLowerCase()}:{" "}
-              <b className={cx("num", m.saldoFim < 0 && "rounded bg-rose-500/90 px-1.5")}>{brl(m.saldoFim)}</b>
-            </div>
-            {calc.ultimoAjuste && <div className="mt-1 text-xs text-emerald-50/70">Conferido com o banco em {dataBR(calc.ultimoAjuste.data)}</div>}
-          </div>
-          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-            <Pilula rotulo="A receber" valor={m.aReceber + at.totalReceitas} icone={<ArrowDownLeft size={15} />} />
-            <Pilula rotulo="A pagar" valor={m.aPagar + at.totalDespesas} icone={<ArrowUpRight size={15} />} />
             <button
               onClick={() => setAjustar(true)}
-              className="flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-emerald-700 shadow-sm hover:bg-emerald-50"
+              className="flex h-8 items-center gap-1.5 rounded-[10px] bg-white/[0.08] px-3 text-[12.5px] font-medium text-white/90 ring-1 ring-inset ring-white/10 backdrop-blur transition hover:bg-white/[0.14]"
             >
-              <SlidersHorizontal size={16} /> Ajustar saldo
+              <SlidersHorizontal size={14} /> Ajustar saldo
             </button>
+          </div>
+          <div className="num mt-3 text-[40px] font-semibold leading-none tracking-[-0.035em] sm:text-[52px]">{brl(calc.saldoAtual)}</div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-[12.5px]">
+            <span className={cx("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ring-1 ring-inset", m.saldoFim < 0 ? "bg-rose-500/15 text-rose-200 ring-rose-400/30" : "bg-emerald-400/10 text-emerald-200 ring-emerald-300/20")}>
+              <TrendingUp size={13} /> Fim de {nomeMes(calc.atual).split(" ")[0].toLowerCase()}: <b className="num font-semibold text-white">{brl(m.saldoFim)}</b>
+            </span>
+            {calc.ultimoAjuste && <span className="text-white/45">conferido com o banco em {dataBR(calc.ultimoAjuste.data)}</span>}
+          </div>
+          <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-white/[0.08] ring-1 ring-white/[0.08]">
+            <Pilula rotulo="A receber" valor={m.aReceber + at.totalReceitas} icone={<ArrowDownLeft size={14} />} cor="text-emerald-300" />
+            <Pilula rotulo="A pagar" valor={m.aPagar + at.totalDespesas} icone={<ArrowUpRight size={14} />} cor="text-rose-300" />
           </div>
         </div>
       </div>
@@ -106,28 +115,26 @@ export default function Painel() {
 
       {/* Indicadores do mês */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Indicador rotulo="Receitas do mês" valor={brl(m.recPrev)} sub={`${brl(m.recReceb)} recebido`} icone={<ArrowDownLeft size={18} />} cor="emerald" />
-        <Indicador rotulo="Despesas do mês" valor={brl(m.despPrev)} sub={`${brl(m.aPagar)} a pagar`} icone={<ArrowUpRight size={18} />} cor="rose" />
+        <Indicador rotulo="Receitas do mês" valor={brl(m.recPrev)} sub={`${brl(m.recReceb)} recebido`} icone={<ArrowDownLeft size={15} />} cor="emerald" />
+        <Indicador rotulo="Despesas do mês" valor={brl(m.despPrev)} sub={`${brl(m.aPagar)} a pagar`} icone={<ArrowUpRight size={15} />} cor="rose" />
         <Indicador
           rotulo="Resultado do mês"
           valor={brl(m.resultado)}
           sub="receitas − despesas"
-          icone={<Scale size={18} />}
+          icone={<Scale size={15} />}
           cor={m.resultado >= 0 ? "emerald" : "rose"}
           destaque={m.resultado >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}
         />
         <Cartao className="p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] text-slate-500">Renda comprometida</span>
-            <span className="rounded-xl bg-indigo-50 p-2 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300">
-              <Gauge size={18} />
-            </span>
+          <div className="flex items-center gap-1.5 text-[12.5px] font-medium text-slate-500">
+            <Gauge size={15} className="text-indigo-500" />
+            Renda comprometida
           </div>
-          <div className="mt-1 flex items-center gap-2">
-            <span className="num text-xl font-bold">{isFinite(m.comprometido) ? pct(m.comprometido) : "—"}</span>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="num text-[22px] font-semibold">{isFinite(m.comprometido) ? pct(m.comprometido) : "—"}</span>
             <Selo cor={corSituacao(m.situacao)}>{m.situacao}</Selo>
           </div>
-          <div className="relative mt-3 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+          <div className="relative mt-3 h-1.5 overflow-hidden rounded-full bg-slate-900/[0.06] dark:bg-white/[0.08]">
             <div className={cx("h-full rounded-full transition-all", corComp)} style={{ width: `${Math.min(100, (isFinite(m.comprometido) ? m.comprometido : 1) * 100)}%` }} />
             <div className="absolute inset-y-0 w-0.5 bg-amber-500/70" style={{ left: `${cfg.limiteAtencao * 100}%` }} />
             <div className="absolute inset-y-0 w-0.5 bg-rose-500/70" style={{ left: `${cfg.limiteRisco * 100}%` }} />
@@ -147,8 +154,8 @@ export default function Painel() {
                 <YAxis {...eixo(cores)} tickFormatter={formatoEixo} width={48} />
                 <Tooltip content={<DicaGrafico />} cursor={{ fill: cores.cursor }} />
                 <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="Receitas" fill={cores.receita} radius={[5, 5, 0, 0]} maxBarSize={18} />
-                <Bar dataKey="Despesas" fill={cores.despesa} radius={[5, 5, 0, 0]} maxBarSize={18} />
+                <Bar isAnimationActive={false} dataKey="Receitas" fill={cores.receita} radius={[5, 5, 0, 0]} maxBarSize={18} />
+                <Bar isAnimationActive={false} dataKey="Despesas" fill={cores.despesa} radius={[5, 5, 0, 0]} maxBarSize={18} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -176,8 +183,8 @@ export default function Painel() {
                 <Tooltip content={<DicaGrafico />} />
                 <ReferenceLine y={0} stroke={cores.despesa} strokeDasharray="4 4" strokeOpacity={0.6} />
                 <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="Realizado" stroke={cores.realizado} strokeWidth={2.4} fill="url(#gr)" connectNulls />
-                <Area type="monotone" dataKey="Projetado" stroke={cores.projetado} strokeWidth={2.4} strokeDasharray="6 4" fill="url(#gp)" connectNulls />
+                <Area isAnimationActive={false} type="monotone" dataKey="Realizado" stroke={cores.realizado} strokeWidth={2.4} fill="url(#gr)" connectNulls />
+                <Area isAnimationActive={false} type="monotone" dataKey="Projetado" stroke={cores.projetado} strokeWidth={2.4} strokeDasharray="6 4" fill="url(#gp)" connectNulls />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -251,31 +258,31 @@ export default function Painel() {
   );
 }
 
-function Pilula({ rotulo, valor, icone }) {
+function Pilula({ rotulo, valor, icone, cor }) {
   return (
-    <div className="min-w-32 flex-1 rounded-2xl bg-white/15 px-4 py-2.5 backdrop-blur-sm sm:flex-none">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-50/90">
+    <div className="bg-slate-950/40 px-4 py-3 backdrop-blur">
+      <div className={cx("flex items-center gap-1.5 text-[12px] font-medium", cor)}>
         {icone} {rotulo}
       </div>
-      <div className="num text-base font-bold">{brl(valor)}</div>
+      <div className="num mt-0.5 text-[17px] font-semibold">{brl(valor)}</div>
     </div>
   );
 }
 
 const CORES_IND = {
-  emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300",
-  rose: "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300",
+  emerald: "text-emerald-600 dark:text-emerald-400",
+  rose: "text-rose-500 dark:text-rose-400",
 };
 
 function Indicador({ rotulo, valor, sub, icone, cor, destaque }) {
   return (
     <Cartao className="p-4">
-      <div className="flex items-center justify-between">
-        <span className="text-[13px] text-slate-500">{rotulo}</span>
-        <span className={cx("rounded-xl p-2", CORES_IND[cor])}>{icone}</span>
+      <div className="flex items-center gap-1.5 text-[12.5px] font-medium text-slate-500">
+        <span className={CORES_IND[cor]}>{icone}</span>
+        {rotulo}
       </div>
-      <div className={cx("num mt-1 truncate text-xl font-bold", destaque)}>{valor}</div>
-      <div className="mt-0.5 truncate text-xs text-slate-500">{sub}</div>
+      <div className={cx("num mt-2 truncate text-[22px] font-semibold", destaque)}>{valor}</div>
+      <div className="mt-0.5 truncate text-[12px] text-slate-400">{sub}</div>
     </Cartao>
   );
 }

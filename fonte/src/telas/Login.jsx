@@ -54,11 +54,20 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gradient-to-br from-emerald-50 via-slate-100 to-sky-50 p-5 dark:from-slate-950 dark:via-slate-950 dark:to-emerald-950/40">
-      <div className="w-full max-w-sm">
+    <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-slate-50 p-5 dark:bg-slate-950">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-60 dark:opacity-25"
+        style={{
+          backgroundImage: "linear-gradient(rgba(0,0,0,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.05) 1px,transparent 1px)",
+          backgroundSize: "40px 40px",
+          maskImage: "radial-gradient(ellipse at 50% 35%,#000 20%,transparent 70%)",
+        }}
+      />
+      <div className="pointer-events-none absolute left-1/2 top-[18%] h-72 w-72 -translate-x-1/2 rounded-full bg-emerald-400/20 blur-3xl" />
+      <div className="relative w-full max-w-sm">
         <div className="mb-7 flex flex-col items-center text-center">
-          <Logo className="mb-4 h-14 w-14" />
-          <h1 className="text-2xl font-bold tracking-tight">Casa & Cofre</h1>
+          <Logo className="mb-5 h-14 w-14 drop-shadow-[0_10px_20px_rgba(0,0,0,.25)]" />
+          <h1 className="text-[26px] font-semibold tracking-[-0.03em]">Casa & Cofre</h1>
           <p className="mt-1 text-sm text-slate-500">O dinheiro da família, organizado.</p>
         </div>
         <Cartao className="p-6">

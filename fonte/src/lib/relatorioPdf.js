@@ -12,7 +12,7 @@ const esc = (t) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 
-export function gerarRelatorioPdf({ itens, mes, filtros, saldoAtual, fimDoMes, ehMesAtual }) {
+export function gerarRelatorioPdf({ itens, mes, periodo = nomeMes(mes), filtros, saldoAtual, fimDoMes, ehMesAtual }) {
   if (!itens.length) return "vazio";
   const total = somar(itens);
   const pago = somar(itens.filter((d) => d.status === PAGO));
@@ -28,7 +28,7 @@ export function gerarRelatorioPdf({ itens, mes, filtros, saldoAtual, fimDoMes, e
   const w = window.open("", "_blank");
   if (!w) return "bloqueado";
   w.document.open();
-  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Despesas - ${esc(nomeMes(mes))}</title><style>
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Despesas - ${esc(periodo)}</title><style>
 @page{size:A4;margin:12mm}*{box-sizing:border-box}body{font:10px/1.35 system-ui,Segoe UI,Arial,sans-serif;color:#0f172a;margin:0}
 h1{font-size:19px;margin:0}.sub{color:#64748b;margin-top:2px}.topo{display:flex;justify-content:space-between;border-bottom:2px solid #10b981;padding-bottom:8px;margin-bottom:10px}
 .marca{font-weight:700;color:#047857;text-align:right}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
@@ -38,7 +38,7 @@ td{border-bottom:1px solid #e2e8f0;padding:5px;vertical-align:top}td small{displ
 .st{padding:1px 6px;border-radius:9px;font-size:8px;font-weight:700}.pg{background:#d1fae5;color:#047857}.pe{background:#ffe4e6;color:#be123c}
 tr{page-break-inside:avoid}thead{display:table-header-group}.rod{margin-top:8px;color:#94a3b8;font-size:8px;display:flex;justify-content:space-between}
 @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>
-<div class="topo"><div><h1>Relatório de despesas</h1><div class="sub">${esc(nomeMes(mes))}${filtros ? " · " + esc(filtros) : ""} · ${itens.length} conta(s)</div></div><div class="marca">Casa &amp; Cofre</div></div>
+<div class="topo"><div><h1>Relatório de despesas</h1><div class="sub">${esc(periodo)}${filtros ? " · " + esc(filtros) : ""} · ${itens.length} conta(s)</div></div><div class="marca">Casa &amp; Cofre</div></div>
 <div class="cards"><div class="card"><span>Total do período</span><b>${esc(brl(total))}</b></div><div class="card verde"><span>Já pago</span><b>${esc(brl(pago))}</b></div><div class="card verm"><span>A pagar</span><b>${esc(brl(aPagar))}</b></div>
 <div class="card"><span>${ehMesAtual ? "Saldo previsto no fim do mês" : "Saldo em conta hoje"}</span><b>${esc(brl(ehMesAtual ? fimDoMes : saldoAtual))}</b></div></div>
 <table><thead><tr><th style="width:13%">Vencimento</th><th>Descrição</th><th style="width:18%">Categoria</th><th style="width:11%" class="c">Status</th><th style="width:14%" class="v">Valor</th></tr></thead><tbody>${linhas}</tbody></table>
