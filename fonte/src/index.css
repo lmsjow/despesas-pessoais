@@ -54,6 +54,16 @@ body {
 .pt-seguro {
   padding-top: env(safe-area-inset-top);
 }
+/* Lista aberta do <select>: o campo tem fundo semitransparente, e o Windows
+   desenhava a lista com fundo branco e texto claro (ilegível no tema escuro). */
+select option {
+  background-color: #fff;
+  color: var(--color-slate-900);
+}
+.dark select option {
+  background-color: var(--color-slate-900);
+  color: var(--color-slate-100);
+}
 input[type="date"]::-webkit-calendar-picker-indicator {
   opacity: 0.55;
 }

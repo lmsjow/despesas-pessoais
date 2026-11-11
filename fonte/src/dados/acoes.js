@@ -2,7 +2,7 @@
 // que o armazenamento grava de uma vez. As telas não montam caminhos à mão.
 
 import { arred } from "../lib/dinheiro.js";
-import { hoje, mesAtual, mesDe } from "../lib/datas.js";
+import { hoje, mesAtual, mesDe, mesesEntre, somarMeses } from "../lib/datas.js";
 import { PAGO, PENDENTE } from "../lib/calculos.js";
 import { gerarLancamentos } from "../lib/gerar.js";
 import { novoId } from "../lib/modelo.js";
@@ -89,9 +89,10 @@ export function ajustarSaldo(saldoAtual, novoSaldo, obs = "") {
  * pendentes dela a partir do mês atual.
  */
 export function salvarRecorrente(dados, rec, atualizarPendentes) {
+  const nova = !rec.id;
   const id = rec.id || novoId();
   const r = { ...rec, id, valor: arred(rec.valor) };
-  const mudancas = { [`recorrentes.${id}`]: r };
+  const mudancas = { [`recorrentes.${id}`]: r, ...lancamentosDaRecorrente(dados, r, nova) };
   if (atualizarPendentes) {
     const atual = mesAtual();
     for (const d of Object.values(dados.despesas)) {
@@ -99,6 +100,30 @@ export function salvarRecorrente(dados, rec, atualizarPendentes) {
         mudancas[`despesas.${d.id}`] = { ...d, valor: r.valor, categoria: r.categoria, forma: r.forma, responsavel: r.responsavel, atualizadoEm: agora() };
     }
   }
+  return mudancas;
+}
+
+/**
+ * Cria logo os lançamentos de uma recorrente, para ela aparecer no mês certo
+ * (relatórios, painel) sem depender do botão "Gerar meses".
+ * Parcelada: todas as parcelas. Fixa: até o último mês já gerado no app (mínimo o atual).
+ * Ao editar, só do mês atual em diante (não recria o que foi apagado no passado).
+ */
+function lancamentosDaRecorrente(dados, r, nova) {
+  if (!/^\d{4}-\d{2}$/.test(r.inicio || "") || r.ativo === false) return {};
+  const atual = mesAtual();
+  const de = nova || r.inicio > atual ? r.inicio : atual;
+  let ate;
+  if (r.tipo === "parcelada") ate = somarMeses(r.inicio, (r.numParcelas || 1) - 1);
+  else {
+    ate = atual > r.inicio ? atual : r.inicio;
+    for (const d of Object.values(dados.despesas || {})) if (d.recId && d.mes > ate) ate = d.mes;
+    if (r.fim && r.fim < ate) ate = r.fim;
+  }
+  if (mesesEntre(de, ate) > 60) ate = somarMeses(de, 60);
+  const mudancas = {};
+  const g = gerarLancamentos({ ...dados, recorrentes: { [r.id]: r }, config: { ...dados.config, rendaFixa: [] } }, de, ate);
+  for (const [gid, it] of Object.entries(g.despesas)) mudancas[`despesas.${gid}`] = it;
   return mudancas;
 }
 
